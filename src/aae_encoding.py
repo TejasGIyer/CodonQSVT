@@ -8,7 +8,7 @@ import numpy as np
 from scipy.optimize import minimize
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector, DensityMatrix
-
+from src.constants import AAE_RANDOM_SEED 
 
 def build_brickwall_ansatz(n_qubits, n_layers, params):
     qc = QuantumCircuit(n_qubits)
@@ -39,8 +39,10 @@ def train_pqc(n_qubits, n_layers, target_state, n_trials=6, maxiter=5000):
     n_params = n_qubits * n_layers
     best_params, best_cost = None, float('inf')
 
+    rng = np.random.default_rng(AAE_RANDOM_SEED)
     for trial in range(n_trials):
-        params_init = np.random.uniform(0, 1, n_params)
+        #params_init = np.random.uniform(0, 1, n_params)
+        params_init = rng.uniform(0, 1, n_params)
         result = minimize(cost_function, params_init, args=(n_qubits, n_layers, target_state),
                           method='L-BFGS-B', options={'maxiter': maxiter, 'ftol': 1e-15, 'gtol': 1e-10})
         print(f"  Trial {trial+1}/{n_trials}: cost={result.fun:.8f}, iters={result.nit}, overlap={1-result.fun:.6f}")
