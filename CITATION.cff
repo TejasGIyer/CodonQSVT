@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the software and the paper."
+title: "CodonQSVT: Quantum Simulation of Codon Substitution Dynamics via Imaginary-Time QSVT"
+type: software
+authors:
+  - family-names: Iyer
+    given-names: Tejas Ganesh
+    affiliation: "Indian Institute of Technology (ISM) Dhanbad"
+  - family-names: Mishra
+    given-names: Sai Swapnil Kumar
+    affiliation: "Indian Institute of Technology (ISM) Dhanbad"
+  - family-names: Shah
+    given-names: Farhan Ali
+    affiliation: "Indian Institute of Technology (ISM) Dhanbad"
+repository-code: "https://github.com/TejasGIyer/CodonQSVT"
+license: MIT
+version: 0.1.0
+date-released: 2025-06-10
+keywords:
+  - quantum computing
+  - QSVT
+  - quantum signal processing
+  - codon substitution
+  - molecular evolution
+  - imaginary-time evolution
+preferred-citation:
+  type: article
+  title: "Quantum Simulation of Codon Substitution Dynamics via Imaginary-Time QSVT"
+  authors:
+    - family-names: Iyer
+      given-names: Tejas Ganesh
+    - family-names: Mishra
+      given-names: Sai Swapnil Kumar
+    - family-names: Shah
+      given-names: Farhan Ali
+  year: 2026
+  notes: "Preprint arXiv:XXXX.XXXXX"

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codonqsvt"
+version = "0.1.0"
+description = "Quantum simulation of codon-substitution dynamics via imaginary-time QSVT"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Tejas Ganesh Iyer" },
+  { name = "Sai Swapnil Kumar Mishra" },
+  { name = "Farhan Ali Shah" },
+]
+keywords = ["quantum-computing", "QSVT", "codon-substitution", "molecular-evolution"]
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "matplotlib>=3.7",
+  "qiskit>=1.0",
+  "qiskit-aer>=0.13",
+  "qiskit-ibm-runtime>=0.20",
+  "pyqsp>=0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "seaborn>=0.12"]
+
+# Project keeps its existing top-level layout: importable packages are `src`
+# and `data` (no src/ -> codonqsvt rename). Imports in the codebase are of the
+# form `from src.module import ...` and `from data.module import ...`, so both
+# directories ship as packages.
+[tool.setuptools]
+packages = ["src", "data"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

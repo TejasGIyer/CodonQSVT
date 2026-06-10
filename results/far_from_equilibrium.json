@@ -1,0 +1,141 @@
+{
+  "config": {
+    "init_kind": "single",
+    "init_label": "delta on least-frequent codon ACG",
+    "kappa": 1.8425,
+    "omega": 0.0599,
+    "V": 13.5,
+    "threshold": 0.2,
+    "epsilon": 0.001,
+    "n_qubits": 6,
+    "n_pauli_terms": 7,
+    "alpha": 2.6399791245329673,
+    "be_ancilla": 3,
+    "f0_init_vs_eq": 0.027389551783238875,
+    "zero_eigenvalues": 1,
+    "readout": "sqrt(p/pi_eq) reweight (METHOD B); exact StatePreparation init"
+  },
+  "rows": [
+    {
+      "t": 0.0,
+      "f_classical_vs_eq": 0.027389551783238875,
+      "f_classical_vs_pi0": 1.0,
+      "f_hellinger_qsvt": 1.0,
+      "f_bhattacharyya_qsvt": 1.0,
+      "tv_qsvt": 0.0,
+      "qsvt_norm2": 1.0,
+      "qsvt_n_phases": 0,
+      "eval_time_s": 0.0
+    },
+    {
+      "t": 0.05,
+      "f_classical_vs_eq": 0.04017575164879983,
+      "f_classical_vs_pi0": 0.9987222611437904,
+      "f_hellinger_qsvt": 0.9971091587287679,
+      "f_bhattacharyya_qsvt": 0.9942266744207913,
+      "tv_qsvt": 0.008954638008324741,
+      "qsvt_norm2": 0.9458696597374177,
+      "qsvt_n_phases": 25,
+      "eval_time_s": 1.8202359676361084
+    },
+    {
+      "t": 0.1,
+      "f_classical_vs_eq": 0.04617482371860204,
+      "f_classical_vs_pi0": 0.9973896162631133,
+      "f_hellinger_qsvt": 0.9943542120297938,
+      "f_bhattacharyya_qsvt": 0.9887402989813924,
+      "tv_qsvt": 0.017407882483947416,
+      "qsvt_norm2": 0.8971945657592719,
+      "qsvt_n_phases": 25,
+      "eval_time_s": 1.8808362483978271
+    },
+    {
+      "t": 0.25,
+      "f_classical_vs_eq": 0.0598080666493469,
+      "f_classical_vs_pi0": 0.993036191914444,
+      "f_hellinger_qsvt": 0.9868261192385677,
+      "f_bhattacharyya_qsvt": 0.9738257896114515,
+      "tv_qsvt": 0.03994147385136468,
+      "qsvt_norm2": 0.7776513765952787,
+      "qsvt_n_phases": 25,
+      "eval_time_s": 1.698460340499878
+    },
+    {
+      "t": 0.5,
+      "f_classical_vs_eq": 0.07900522943157862,
+      "f_classical_vs_pi0": 0.9844262857020233,
+      "f_hellinger_qsvt": 0.9763226572849748,
+      "f_bhattacharyya_qsvt": 0.9532059311279943,
+      "tv_qsvt": 0.06887576319173003,
+      "qsvt_norm2": 0.6384382958142725,
+      "qsvt_n_phases": 27,
+      "eval_time_s": 1.8497278690338135
+    },
+    {
+      "t": 0.75,
+      "f_classical_vs_eq": 0.09764645574798991,
+      "f_classical_vs_pi0": 0.9737881976038569,
+      "f_hellinger_qsvt": 0.9675401856628048,
+      "f_bhattacharyya_qsvt": 0.9361340108724147,
+      "tv_qsvt": 0.08849598419236154,
+      "qsvt_norm2": 0.5431146793190916,
+      "qsvt_n_phases": 29,
+      "eval_time_s": 1.8985154628753662
+    },
+    {
+      "t": 1.0,
+      "f_classical_vs_eq": 0.1169049405843694,
+      "f_classical_vs_pi0": 0.9607014468637307,
+      "f_hellinger_qsvt": 0.9595461098070366,
+      "f_bhattacharyya_qsvt": 0.9207287368458177,
+      "tv_qsvt": 0.10008825925093875,
+      "qsvt_norm2": 0.473867704551255,
+      "qsvt_n_phases": 31,
+      "eval_time_s": 2.1978399753570557
+    },
+    {
+      "t": 1.5,
+      "f_classical_vs_eq": 0.15863323675062013,
+      "f_classical_vs_pi0": 0.9254930105888749,
+      "f_hellinger_qsvt": 0.9416811685324207,
+      "f_bhattacharyya_qsvt": 0.8867634231685853,
+      "tv_qsvt": 0.10569628132147765,
+      "qsvt_norm2": 0.3686132596004781,
+      "qsvt_n_phases": 35,
+      "eval_time_s": 2.3734965324401855
+    },
+    {
+      "t": 2.0,
+      "f_classical_vs_eq": 0.2044703950265162,
+      "f_classical_vs_pi0": 0.8761962953944533,
+      "f_hellinger_qsvt": 0.9162095326806026,
+      "f_bhattacharyya_qsvt": 0.8394399077748081,
+      "tv_qsvt": 0.14907817012763872,
+      "qsvt_norm2": 0.3037791744775317,
+      "qsvt_n_phases": 39,
+      "eval_time_s": 2.6055142879486084
+    },
+    {
+      "t": 3.0,
+      "f_classical_vs_eq": 0.2973007092205413,
+      "f_classical_vs_pi0": 0.7412236716938627,
+      "f_hellinger_qsvt": 0.8331799758059459,
+      "f_bhattacharyya_qsvt": 0.6941888720839965,
+      "tv_qsvt": 0.3057901726246297,
+      "qsvt_norm2": 0.3307549175816873,
+      "qsvt_n_phases": 47,
+      "eval_time_s": 3.2143948078155518
+    },
+    {
+      "t": 5.0,
+      "f_classical_vs_eq": 0.4150555429511449,
+      "f_classical_vs_pi0": 0.5165080023385547,
+      "f_hellinger_qsvt": 0.6798859343247835,
+      "f_bhattacharyya_qsvt": 0.46224488369268385,
+      "tv_qsvt": 0.5327216244146326,
+      "qsvt_norm2": 1052.4255882703887,
+      "qsvt_n_phases": 63,
+      "eval_time_s": 4.322397947311401
+    }
+  ]
+}

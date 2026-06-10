@@ -1,0 +1,15 @@
+# Core dependencies
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+
+# Quantum computing
+qiskit>=1.0.0
+qiskit-aer>=0.13.0
+qiskit-ibm-runtime>=0.20.0
+
+# QSP phase angle computation
+pyqsp>=0.2.0
+
+# Optional: for enhanced visualization
+seaborn>=0.12.0

@@ -1,0 +1,486 @@
+{
+  "dataset": "GAPDH_4species",
+  "species": [
+    "HUMAN",
+    "MOUSE",
+    "RAT",
+    "DOG"
+  ],
+  "n_codons_total": 1336,
+  "n_unique_sense": 58,
+  "n_qubits": 6,
+  "n_layers": 6,
+  "n_params": 36,
+  "n_trials": 6,
+  "maxiter": 5000,
+  "optimizer": "L-BFGS-B",
+  "overlap": 0.9713217037684914,
+  "fidelity": 0.9434658522117249,
+  "cost": 0.028678296231508638,
+  "tv_distance": 0.1249646861945533,
+  "max_delta_p": 0.02752360951293867,
+  "train_time_s": 161.5760362148285,
+  "circuit_depth": 12,
+  "n_cx_gates": 15,
+  "n_ry_gates": 36,
+  "per_codon": [
+    {
+      "codon": "AAG",
+      "amino_acid": "Lys",
+      "p_target": 0.10705217310721897,
+      "p_achieved": 0.11902071177583813,
+      "delta": 0.01196853866861916
+    },
+    {
+      "codon": "GCC",
+      "amino_acid": "Ala",
+      "p_target": 0.08570104716893709,
+      "p_achieved": 0.09659521524855244,
+      "delta": 0.010894168079615352
+    },
+    {
+      "codon": "ATC",
+      "amino_acid": "Ile",
+      "p_target": 0.07124455564822538,
+      "p_achieved": 0.05961931276516526,
+      "delta": 0.011625242883060119
+    },
+    {
+      "codon": "AAC",
+      "amino_acid": "Asn",
+      "p_target": 0.06672226855713094,
+      "p_achieved": 0.05758992159664166,
+      "delta": 0.009132346960489278
+    },
+    {
+      "codon": "GGC",
+      "amino_acid": "Gly",
+      "p_target": 0.06672226855713094,
+      "p_achieved": 0.05445393905101036,
+      "delta": 0.012268329506120577
+    },
+    {
+      "codon": "GTG",
+      "amino_acid": "Val",
+      "p_target": 0.06672226855713094,
+      "p_achieved": 0.06620825367370212,
+      "delta": 0.0005140148834288233
+    },
+    {
+      "codon": "GTC",
+      "amino_acid": "Val",
+      "p_target": 0.06021684737281068,
+      "p_achieved": 0.0682585655858572,
+      "delta": 0.008041718213046521
+    },
+    {
+      "codon": "GAC",
+      "amino_acid": "Asp",
+      "p_target": 0.048206839032527114,
+      "p_achieved": 0.051219751207787566,
+      "delta": 0.0030129121752604515
+    },
+    {
+      "codon": "GCT",
+      "amino_acid": "Ala",
+      "p_target": 0.04450004633490872,
+      "p_achieved": 0.03728501139264667,
+      "delta": 0.007215034942262048
+    },
+    {
+      "codon": "ACC",
+      "amino_acid": "Thr",
+      "p_target": 0.04094152534519507,
+      "p_achieved": 0.04730982705966109,
+      "delta": 0.006368301714466014
+    },
+    {
+      "codon": "GAG",
+      "amino_acid": "Glu",
+      "p_target": 0.03753127606338616,
+      "p_achieved": 0.038886609916716844,
+      "delta": 0.0013553338533306841
+    },
+    {
+      "codon": "ATG",
+      "amino_acid": "Met",
+      "p_target": 0.031155592623482532,
+      "p_achieved": 0.03718220485084417,
+      "delta": 0.006026612227361637
+    },
+    {
+      "codon": "TCC",
+      "amino_acid": "Ser",
+      "p_target": 0.031155592623482532,
+      "p_achieved": 0.0036319831105438606,
+      "delta": 0.02752360951293867
+    },
+    {
+      "codon": "GGG",
+      "amino_acid": "Gly",
+      "p_target": 0.02270410527291261,
+      "p_achieved": 0.0284388606630989,
+      "delta": 0.005734755390186287
+    },
+    {
+      "codon": "TTC",
+      "amino_acid": "Phe",
+      "p_target": 0.02018348623853211,
+      "p_achieved": 0.011405508004707667,
+      "delta": 0.008777978233824445
+    },
+    {
+      "codon": "CTC",
+      "amino_acid": "Leu",
+      "p_target": 0.017811138912056344,
+      "p_achieved": 0.022095753922860104,
+      "delta": 0.004284615010803759
+    },
+    {
+      "codon": "CCC",
+      "amino_acid": "Pro",
+      "p_target": 0.016680567139282735,
+      "p_achieved": 0.010849696959866751,
+      "delta": 0.005830870179415984
+    },
+    {
+      "codon": "GAT",
+      "amino_acid": "Asp",
+      "p_target": 0.015587063293485312,
+      "p_achieved": 0.016792289519156383,
+      "delta": 0.0012052262256710706
+    },
+    {
+      "codon": "AAA",
+      "amino_acid": "Lys",
+      "p_target": 0.014530627374664073,
+      "p_achieved": 0.004578407924542356,
+      "delta": 0.009952219450121716
+    },
+    {
+      "codon": "ACT",
+      "amino_acid": "Thr",
+      "p_target": 0.013511259382819017,
+      "p_achieved": 0.0226329672171004,
+      "delta": 0.009121707834281383
+    },
+    {
+      "codon": "CTG",
+      "amino_acid": "Leu",
+      "p_target": 0.013511259382819017,
+      "p_achieved": 0.011967363018312914,
+      "delta": 0.0015438963645061036
+    },
+    {
+      "codon": "ATT",
+      "amino_acid": "Ile",
+      "p_target": 0.010675562969140953,
+      "p_achieved": 0.003706549540559037,
+      "delta": 0.006969013428581916
+    },
+    {
+      "codon": "CAG",
+      "amino_acid": "Gln",
+      "p_target": 0.010675562969140953,
+      "p_achieved": 0.011380592543820345,
+      "delta": 0.000705029574679392
+    },
+    {
+      "codon": "TCT",
+      "amino_acid": "Ser",
+      "p_target": 0.008173477898248542,
+      "p_achieved": 0.018677723163833863,
+      "delta": 0.010504245265585322
+    },
+    {
+      "codon": "TAC",
+      "amino_acid": "Tyr",
+      "p_target": 0.0074135853952367724,
+      "p_achieved": 0.001094493727242101,
+      "delta": 0.0063190916679946715
+    },
+    {
+      "codon": "TAT",
+      "amino_acid": "Tyr",
+      "p_target": 0.0074135853952367724,
+      "p_achieved": 0.009573134353850403,
+      "delta": 0.00215954895861363
+    },
+    {
+      "codon": "TTT",
+      "amino_acid": "Phe",
+      "p_target": 0.0074135853952367724,
+      "p_achieved": 8.930451349176168e-05,
+      "delta": 0.007324280881745011
+    },
+    {
+      "codon": "AAT",
+      "amino_acid": "Asn",
+      "p_target": 0.006690760819201186,
+      "p_achieved": 0.008002796219496358,
+      "delta": 0.0013120354002951725
+    },
+    {
+      "codon": "GGT",
+      "amino_acid": "Gly",
+      "p_target": 0.006690760819201186,
+      "p_achieved": 0.005454783919717626,
+      "delta": 0.0012359768994835594
+    },
+    {
+      "codon": "CAC",
+      "amino_acid": "His",
+      "p_target": 0.006005004170141785,
+      "p_achieved": 0.011954982695208886,
+      "delta": 0.005949978525067102
+    },
+    {
+      "codon": "CCT",
+      "amino_acid": "Pro",
+      "p_target": 0.004170141784820684,
+      "p_achieved": 0.005231398618488165,
+      "delta": 0.0010612568336674814
+    },
+    {
+      "codon": "CGT",
+      "amino_acid": "Arg",
+      "p_target": 0.004170141784820684,
+      "p_achieved": 0.0007292724008873115,
+      "delta": 0.003440869383933372
+    },
+    {
+      "codon": "CAT",
+      "amino_acid": "His",
+      "p_target": 0.0036326568436660183,
+      "p_achieved": 0.0021597025797416465,
+      "delta": 0.0014729542639243718
+    },
+    {
+      "codon": "GGA",
+      "amino_acid": "Gly",
+      "p_target": 0.0036326568436660183,
+      "p_achieved": 0.0045303768641366485,
+      "delta": 0.0008977200204706303
+    },
+    {
+      "codon": "TGC",
+      "amino_acid": "Cys",
+      "p_target": 0.0036326568436660183,
+      "p_achieved": 0.003590586781653052,
+      "delta": 4.207006201296633e-05
+    },
+    {
+      "codon": "AGC",
+      "amino_acid": "Ser",
+      "p_target": 0.002668890742285238,
+      "p_achieved": 0.005683674443175005,
+      "delta": 0.003014783700889767
+    },
+    {
+      "codon": "GTT",
+      "amino_acid": "Val",
+      "p_target": 0.002668890742285238,
+      "p_achieved": 0.010240621097515243,
+      "delta": 0.007571730355230004
+    },
+    {
+      "codon": "TGG",
+      "amino_acid": "Trp",
+      "p_target": 0.002668890742285238,
+      "p_achieved": 0.006833456593646555,
+      "delta": 0.004164565851361317
+    },
+    {
+      "codon": "AGG",
+      "amino_acid": "Arg",
+      "p_target": 0.002242609582059123,
+      "p_achieved": 0.000376740629507755,
+      "delta": 0.0018658689525513682
+    },
+    {
+      "codon": "CGC",
+      "amino_acid": "Arg",
+      "p_target": 0.0011861736632378837,
+      "p_achieved": 0.0012153249834290021,
+      "delta": 2.9151320191118458e-05
+    },
+    {
+      "codon": "GAA",
+      "amino_acid": "Glu",
+      "p_target": 0.0011861736632378837,
+      "p_achieved": 0.006409042365332418,
+      "delta": 0.005222868702094535
+    },
+    {
+      "codon": "GCA",
+      "amino_acid": "Ala",
+      "p_target": 0.0011861736632378837,
+      "p_achieved": 0.0005233143237468176,
+      "delta": 0.000662859339491066
+    },
+    {
+      "codon": "ACA",
+      "amino_acid": "Thr",
+      "p_target": 0.0009081642109165046,
+      "p_achieved": 0.0005885149686996038,
+      "delta": 0.0003196492422169008
+    },
+    {
+      "codon": "CGA",
+      "amino_acid": "Arg",
+      "p_target": 0.0004633490872022983,
+      "p_achieved": 0.000816343011835192,
+      "delta": 0.0003529939246328937
+    },
+    {
+      "codon": "TTG",
+      "amino_acid": "Leu",
+      "p_target": 0.0004633490872022983,
+      "p_achieved": 3.394235841063264e-05,
+      "delta": 0.00042940672879166565
+    },
+    {
+      "codon": "CCA",
+      "amino_acid": "Pro",
+      "p_target": 0.0002965434158094709,
+      "p_achieved": 0.00016017898245472865,
+      "delta": 0.00013636443335474227
+    },
+    {
+      "codon": "CTA",
+      "amino_acid": "Leu",
+      "p_target": 0.0001668056713928274,
+      "p_achieved": 2.3488781110643804e-06,
+      "delta": 0.000164456793281763
+    },
+    {
+      "codon": "CTT",
+      "amino_acid": "Leu",
+      "p_target": 0.0001668056713928274,
+      "p_achieved": 0.0009219214837828702,
+      "delta": 0.0007551158123900428
+    },
+    {
+      "codon": "GTA",
+      "amino_acid": "Val",
+      "p_target": 0.0001668056713928274,
+      "p_achieved": 0.0009712885954954757,
+      "delta": 0.0008044829241026483
+    },
+    {
+      "codon": "TCA",
+      "amino_acid": "Ser",
+      "p_target": 0.0001668056713928274,
+      "p_achieved": 0.00012040927703558416,
+      "delta": 4.6396394357243225e-05
+    },
+    {
+      "codon": "TGT",
+      "amino_acid": "Cys",
+      "p_target": 0.0001668056713928274,
+      "p_achieved": 1.492086472783252e-05,
+      "delta": 0.00015188480666499486
+    },
+    {
+      "codon": "TTA",
+      "amino_acid": "Leu",
+      "p_target": 0.0001668056713928274,
+      "p_achieved": 0.004044509774252769,
+      "delta": 0.003877704102859941
+    },
+    {
+      "codon": "AGT",
+      "amino_acid": "Ser",
+      "p_target": 7.413585395236773e-05,
+      "p_achieved": 0.0028154274488822505,
+      "delta": 0.0027412915949298826
+    },
+    {
+      "codon": "GCG",
+      "amino_acid": "Ala",
+      "p_target": 7.413585395236773e-05,
+      "p_achieved": 0.0005723464636478398,
+      "delta": 0.0004982106096954721
+    },
+    {
+      "codon": "TCG",
+      "amino_acid": "Ser",
+      "p_target": 7.413585395236773e-05,
+      "p_achieved": 0.00015989115888819322,
+      "delta": 8.575530493582549e-05
+    },
+    {
+      "codon": "ACG",
+      "amino_acid": "Thr",
+      "p_target": 1.8533963488091932e-05,
+      "p_achieved": 0.0004550126584424542,
+      "delta": 0.00043647869495436225
+    },
+    {
+      "codon": "CAA",
+      "amino_acid": "Gln",
+      "p_target": 1.8533963488091932e-05,
+      "p_achieved": 0.000933983279816325,
+      "delta": 0.0009154493163282331
+    },
+    {
+      "codon": "CGG",
+      "amino_acid": "Arg",
+      "p_target": 1.8533963488091932e-05,
+      "p_achieved": 0.0007213040239713586,
+      "delta": 0.0007027700604832666
+    }
+  ],
+  "encoding_comparison": {
+    "mottonen": {
+      "qubits": 6,
+      "depth": 379,
+      "two_q_gates": 89,
+      "total_gates": 681,
+      "swaps": 0,
+      "fidelity": 1.0
+    },
+    "angle": {
+      "qubits": 58,
+      "depth": 4,
+      "two_q_gates": 0,
+      "total_gates": 232,
+      "swaps": 0,
+      "fidelity": 1.0
+    },
+    "aae": {
+      "qubits": 6,
+      "depth": 39,
+      "two_q_gates": 15,
+      "total_gates": 168,
+      "swaps": 0,
+      "fidelity": 0.9363467470664679
+    }
+  },
+  "noisy_quebec": {
+    "ideal_overlap": 0.9713217037684914,
+    "ideal_fidelity": 0.9434658522117249,
+    "sf_target_ideal": 0.9434658522117372,
+    "sf_target_noisy": 0.8332709288070274,
+    "sf_ideal_noisy": 0.8832530758372609,
+    "sf_noise_drop": 0.11019492340470982,
+    "hf_target_ideal": 0.9443100821233334,
+    "hf_target_noisy_dm": 0.9363467470664679,
+    "hf_ideal_noisy_dm": 0.9940337891097025,
+    "hf_target_aer_shots": 0.41808783134990213,
+    "hf_target_noisy_shots": 0.4535610450512137,
+    "hf_ideal_noisy_shots": 0.49591596852945563,
+    "tv_ideal": 0.1249646861945533,
+    "tv_noisy_dm": 0.12972634800386662,
+    "tv_noisy_shots": 0.5514337056958636,
+    "leakage_aer": 0.012939453125,
+    "leakage_noisy": 0.023193359375,
+    "transpiled_depth": 39,
+    "transpiled_total_gates": 168,
+    "transpiled_2q_gates": 15,
+    "transpiled_swaps": 0,
+    "transpile_time_s": 0.17724990844726562,
+    "run_time_s": 3.7918081283569336,
+    "shots": 8192
+  }
+}

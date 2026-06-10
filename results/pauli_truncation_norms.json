@@ -1,0 +1,57 @@
+{
+  "config": {
+    "kappa": 1.8425,
+    "omega": 0.0599,
+    "V": 13.5,
+    "n_qubits": 6,
+    "floor_threshold": 1e-08,
+    "H_norm_2": 2.917439021739659,
+    "H_norm_F": 9.614835634541414
+  },
+  "rows": [
+    {
+      "threshold": 0.2,
+      "n_pauli_terms": 4,
+      "n_dropped": 1019,
+      "alpha": 1.697733258755579,
+      "spectral_norm_error": 1.5824391890392502,
+      "frobenius_norm_error": 5.482081675071712,
+      "frobenius_norm_error_closed_form": 5.482081675071712,
+      "relative_frobenius_error": 0.5701690474434391,
+      "relative_spectral_error": 0.5424069456970679
+    },
+    {
+      "threshold": 0.1,
+      "n_pauli_terms": 15,
+      "n_dropped": 1008,
+      "alpha": 3.1539339135522773,
+      "spectral_norm_error": 1.1492738720474978,
+      "frobenius_norm_error": 4.149637351492939,
+      "frobenius_norm_error_closed_form": 4.149637351492939,
+      "relative_frobenius_error": 0.43158692558251505,
+      "relative_spectral_error": 0.3939324398842755
+    },
+    {
+      "threshold": 0.075,
+      "n_pauli_terms": 25,
+      "n_dropped": 998,
+      "alpha": 3.995054833279095,
+      "spectral_norm_error": 1.045271699261363,
+      "frobenius_norm_error": 3.5599129851198614,
+      "frobenius_norm_error_closed_form": 3.559912985119861,
+      "relative_frobenius_error": 0.3702520896281191,
+      "relative_spectral_error": 0.3582839920465831
+    },
+    {
+      "threshold": 0.05,
+      "n_pauli_terms": 48,
+      "n_dropped": 975,
+      "alpha": 5.4030487425716025,
+      "spectral_norm_error": 0.8786357814677532,
+      "frobenius_norm_error": 2.662223133438191,
+      "frobenius_norm_error_closed_form": 2.662223133438191,
+      "relative_frobenius_error": 0.27688701446690595,
+      "relative_spectral_error": 0.30116680243202676
+    }
+  ]
+}
