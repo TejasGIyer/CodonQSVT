@@ -65,7 +65,7 @@ def test_save_load_roundtrip():
         with open(path) as f:
             payload = json.load(f)
         for required in ('params', 'cost', 'overlap', 'n_qubits',
-                         'n_layers', 'dataset', 'timestamp'):
+                         'n_layers', 'dataset', 'timestamp', 'target_sha256'):
             assert required in payload, f"Missing field '{required}' in saved JSON"
         assert payload['dataset'] == 'unit_test'
 
@@ -205,6 +205,23 @@ def test_qubit_mismatch_raises():
         raise AssertionError("load_aae_circuit did not raise ValueError on n_qubits mismatch.")
 
 
+def test_target_mismatch_retrains():
+    """A same-size cache must not be reused for a different target state."""
+    s1 = _tiny_step1(n_qubits=3, seed=42)
+    different = _tiny_step1(n_qubits=3, seed=43)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, 'aae.json')
+        get_aae_circuit(s1, path, n_layers=2, n_trials=1, maxiter=200)
+        before = json.load(open(path))['target_sha256']
+        loaded = get_aae_circuit(
+            different, path, n_layers=2, n_trials=1, maxiter=200)
+        after = json.load(open(path))['target_sha256']
+
+    assert loaded['encoding_type'] == 'aae'
+    assert before != after
+
+
 if __name__ == "__main__":
     print("Running AAE cache tests (uses tiny n_qubits=3, n_layers=2 ansatz)...")
     print()
@@ -214,5 +231,6 @@ if __name__ == "__main__":
     test_force_retrain_overwrites()
     test_missing_file_raises()
     test_qubit_mismatch_raises()
+    test_target_mismatch_retrains()
     print()
     print("All AAE cache tests passed.")

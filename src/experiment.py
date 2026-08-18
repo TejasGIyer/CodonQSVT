@@ -85,7 +85,11 @@ def counts_to_codon_probs(counts, sense_codons, n_qubits=6, shots=8192):
     probs = np.zeros(n_codons)
     total = sum(counts.values())
     for bitstring, count in counts.items():
-        idx = int(bitstring[::-1], 2)
+        # Qiskit returns bitstrings MSB-first with qubit 0 as the RIGHTMOST
+        # character, so int(bitstring, 2) is already the little-endian state
+        # index. The previous int(bitstring[::-1], 2) reversed it: a circuit
+        # setting qubit 2 to |1> (true index 4) was being scored as index 1.
+        idx = int(bitstring.replace(' ', ''), 2)
         if idx < n_codons:
             probs[idx] += count / total
     s = probs.sum()
@@ -114,7 +118,7 @@ def _dm_from_counts(counts, num_qubits):
     arr = np.zeros((n, n), dtype=complex)
     total = sum(counts.values())
     for bs, c in counts.items():
-        idx = int(bs[::-1], 2)
+        idx = int(bs.replace(' ', ''), 2)
         if idx < n:
             arr[idx, idx] = c / total
     return DensityMatrix(arr)

@@ -181,6 +181,37 @@ def symmetrize_to_hamiltonian(Q, pi, n_qubits=6, pad_eigenvalue='lam_min'):
     return H, info
 
 
+def reweight_to_distribution(probs, pi_eq, n_codons=None):
+    """
+    Invert the detailed-balance symmetrization at readout.
+
+    Because H = D^{1/2} Q D^{-1/2}, the simulated state is
+        psi(t) = D^{-1/2} pi(t),
+    so the measured probabilities carry a pi_eq bias:
+        p_i  proportional to  pi_i(t)^2 / pi_eq_i.
+    Inverting gives the physical distribution:
+        pi_i(t)  proportional to  sqrt( p_i * pi_eq_i ).
+
+    NOTE THE DIRECTION. This MULTIPLIES by sqrt(pi_eq). The earlier
+    sqrt(p / pi_eq) form divided, which is not the inverse map: feeding it the
+    exact classical distribution returns F_H = 0.894 instead of 1.0, and that
+    constant 0.894 floor was what the reported Table 9 fidelities were sitting
+    on.
+
+    This is the single canonical implementation -- import it everywhere rather
+    than re-defining a local copy per script.
+    """
+    probs = np.asarray(probs, dtype=float)
+    pi_eq = np.asarray(pi_eq, dtype=float)
+    n = len(probs) if n_codons is None else int(n_codons)
+
+    rw = np.zeros(n)
+    mask = (pi_eq[:n] > 1e-15) & (probs[:n] > 0)
+    rw[mask] = np.sqrt(probs[:n][mask] * pi_eq[:n][mask])
+    s = float(rw.sum())
+    return rw / s if s > 1e-12 else np.zeros(n)
+
+
 def decompose_to_pauli(H, n_qubits=6, threshold=1e-8):
     """
     Step 5: Decompose the Hamiltonian H into a sum of Pauli strings.

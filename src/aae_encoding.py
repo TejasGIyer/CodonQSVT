@@ -1,5 +1,6 @@
 """Step 2 (AAE): Approximate Amplitude Encoding — Brickwall ansatz + L-BFGS training."""
 
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -154,7 +155,7 @@ def aae_noisy_fidelity(step1_result, step2_result, shots=8192):
     aer_probs_shots = np.zeros(n_states)
     total_aer = sum(aer_counts.values())
     for bitstring, count in aer_counts.items():
-        idx = int(bitstring[::-1], 2)
+        idx = int(bitstring.replace(' ', ''), 2)
         aer_probs_shots[idx] = count / total_aer
 
     # --- Noisy FakeQuebec shots ---
@@ -179,7 +180,7 @@ def aae_noisy_fidelity(step1_result, step2_result, shots=8192):
     noisy_probs_shots = np.zeros(n_states)
     total_noisy = sum(quebec_counts.values())
     for bitstring, count in quebec_counts.items():
-        idx = int(bitstring[::-1], 2)
+        idx = int(bitstring.replace(' ', ''), 2)
         noisy_probs_shots[idx] = count / total_noisy
 
     # --- Noisy density matrix (exact noisy probabilities + state fidelity) ---
@@ -214,7 +215,9 @@ def aae_noisy_fidelity(step1_result, step2_result, shots=8192):
 
     # --- Hellinger fidelity ---
     def hellinger_fidelity(p, q):
-        return float(np.sum(np.sqrt(np.clip(p, 0, None) * np.clip(q, 0, None)))) ** 2
+        # F_H = 1 - H^2 = sum_i sqrt(p_i q_i), matching hw_common.py and
+        # every dynamics script. State fidelity remains the squared overlap.
+        return float(np.sum(np.sqrt(np.clip(p, 0, None) * np.clip(q, 0, None))))
 
     # From exact probabilities (statevector / DM diagonal)
     hf_target_ideal = hellinger_fidelity(target_probs, ideal_probs)
@@ -251,7 +254,8 @@ def aae_noisy_fidelity(step1_result, step2_result, shots=8192):
         print(f"  {'State fidelity (density matrix)':<42} {sf_target_ideal:>10.6f} {sf_target_noisy:>10.6f} {sf_noise_drop:>10.6f}")
         print(f"  {'Hellinger fidelity (exact probs/DM)':<42} {hf_target_ideal:>10.6f} {hf_target_noisy_dm:>10.6f} {hf_target_ideal - hf_target_noisy_dm:>10.6f}")
 
-    print(f"  {'Hellinger fidelity (shots, n={shots})':<42} {hf_target_aer_shots:>10.6f} {hf_target_noisy_shots:>10.6f} {hf_target_aer_shots - hf_target_noisy_shots:>10.6f}")
+    _shots_label = f'Hellinger fidelity (shots, n={shots})'
+    print(f"  {_shots_label:<42} {hf_target_aer_shots:>10.6f} {hf_target_noisy_shots:>10.6f} {hf_target_aer_shots - hf_target_noisy_shots:>10.6f}")
 
     tv_noisy_display = tv_noisy_dm if tv_noisy_dm is not None else tv_noisy_shots
     print(f"  {'TV distance':<42} {tv_ideal:>10.6f} {tv_noisy_display:>10.6f} {'':>10}")
@@ -312,7 +316,7 @@ def aae_noisy_fidelity(step1_result, step2_result, shots=8192):
 # L-BFGS-B optimization only runs when you actually want to re-train
 # (e.g. trying a different number of layers).
 #
-# Schema (results/best_aae_params_gapdh.json):
+# Schema (results/best_aae_params_gapdh_probability.json):
 #   {
 #     "params":    [float, ...],   # length = n_qubits * n_layers
 #     "cost":      float,          # 1 - Re<target|sv> from training
@@ -321,9 +325,16 @@ def aae_noisy_fidelity(step1_result, step2_result, shots=8192):
 #     "n_layers":  int,
 #     "dataset":   str,            # tag for audit, e.g. "GAPDH_4species"
 #     "timestamp": str,            # UTC ISO-8601, set at save time
+#     "target_sha256": str,         # fingerprint of the target amplitudes
 #   }
 # Older files without `dataset` / `timestamp` are still accepted by the
 # loader; those fields are optional.
+
+
+def _target_fingerprint(target):
+    """Return a stable fingerprint for a real, normalized target vector."""
+    arr = np.ascontiguousarray(np.asarray(target, dtype=np.float64))
+    return hashlib.sha256(arr.tobytes()).hexdigest()
 
 
 def save_aae_params(json_path, aae_result, dataset_tag=None):
@@ -333,6 +344,7 @@ def save_aae_params(json_path, aae_result, dataset_tag=None):
     Accepts the dict returned by either aae_encode() or load_aae_circuit().
     Creates the parent directory if needed.
     """
+    target = np.real(np.asarray(aae_result['target_sv'].data))
     payload = {
         'params'   : np.asarray(aae_result['best_params']).tolist(),
         'cost'     : float(aae_result['best_cost']),
@@ -341,6 +353,7 @@ def save_aae_params(json_path, aae_result, dataset_tag=None):
         'n_layers' : int(aae_result['n_layers']),
         'dataset'  : dataset_tag or 'unknown',
         'timestamp': datetime.now(timezone.utc).isoformat(),
+        'target_sha256': _target_fingerprint(target),
     }
     out_dir = os.path.dirname(os.path.abspath(json_path))
     if out_dir:
@@ -358,8 +371,8 @@ def load_aae_circuit(json_path, step1_result,
     downstream pipelines (QSP/QSVT) work without code changes.
 
     The statevector is recomputed from the rebuilt circuit (cheap, ms).
-    Cost/overlap are taken from the JSON when present, else recomputed
-    against step1_result['d_normalized'].
+    Cost/overlap are recomputed against step1_result['d_normalized']; cached
+    metadata is never trusted for a different target state.
 
     Parameters
     ----------
@@ -413,7 +426,14 @@ def load_aae_circuit(json_path, step1_result,
         raise ValueError(f"AAE params n_layers ({n_layers}) != expected ({expected_n_layers}).")
 
     # Rebuild the trained circuit — RY angles baked in as concrete floats.
-    d = step1_result['d_normalized']
+    d = np.asarray(step1_result['d_normalized'], dtype=float)
+    cached_fingerprint = data.get('target_sha256')
+    if cached_fingerprint is not None:
+        expected_fingerprint = _target_fingerprint(d)
+        if cached_fingerprint != expected_fingerprint:
+            raise ValueError(
+                "AAE params target fingerprint does not match the requested "
+                "amplitude distribution. Re-train this cache for the current target.")
     circuit = build_brickwall_ansatz(n_q, n_layers, params)
 
     circuit_meas = QuantumCircuit(n_q, n_q)
@@ -423,8 +443,14 @@ def load_aae_circuit(json_path, step1_result,
     trained_sv = Statevector.from_instruction(circuit)
     sv_data    = np.asarray(trained_sv.data)
 
-    overlap = float(data['overlap']) if 'overlap' in data else float(abs(np.vdot(d, sv_data)))
-    cost    = float(data['cost'])    if 'cost'    in data else float(1.0 - np.real(np.vdot(d, sv_data)))
+    overlap = float(abs(np.vdot(d, sv_data)))
+    cost = float(1.0 - np.real(np.vdot(d, sv_data)))
+    if cached_fingerprint is None and (
+            ('overlap' in data and not np.isclose(float(data['overlap']), overlap, atol=1e-8)) or
+            ('cost' in data and not np.isclose(float(data['cost']), cost, atol=1e-8))):
+        raise ValueError(
+            "Legacy AAE cache metrics do not match the requested target. "
+            "Re-train and save a fingerprinted cache.")
 
     gc = dict(circuit.count_ops())
 

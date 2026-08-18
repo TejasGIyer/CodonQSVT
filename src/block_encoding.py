@@ -27,7 +27,28 @@ if _PROJECT_DIR not in sys.path:
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.quantum_info import SparsePauliOp, Operator, Statevector
 from qiskit.circuit.library import StatePreparation
+from qiskit.circuit.library import MCPhaseGate
 
+
+def _apply_coeff_phase(qc, anc_qubits, theta, tol=1e-12):
+    """
+    Apply the phase e^{i*theta} conditioned on ALL ancilla qubits being |1>.
+
+    Used inside the SELECT X-sandwich, where the ancilla state |k> has been
+    mapped to |1...1>. This is what carries the SIGN of the Pauli coefficient
+    into the block encoding.
+
+    For real c_k, theta is 0 (c_k > 0) or pi (c_k < 0).
+    """
+    if abs(theta) < tol:
+        return
+    n = len(anc_qubits)
+    if n == 1:
+        qc.p(theta, anc_qubits[0])
+    elif n == 2:
+        qc.cp(theta, anc_qubits[0], anc_qubits[1])
+    else:
+        qc.append(MCPhaseGate(theta, n - 1), anc_qubits)
 
 # =========================================================================
 # LCU BLOCK ENCODING
@@ -75,21 +96,24 @@ def build_lcu_block_encoding(pauli_op, n_data_qubits=6):
     # ancilla = qubits 0..n_ancilla-1, data = qubits n_ancilla..n_total-1
     select_circ = QuantumCircuit(n_total, name='SELECT')
 
+    thetas = np.angle(coeffs)
+
     for k, (label, coeff) in enumerate(zip(labels, coeffs)):
         if k >= n_ancilla_states:
             break
 
         k_binary = format(k, f'0{n_ancilla}b')
 
-        # FIX: Ancilla qubits are at indices 0..n_ancilla-1 (not n_data..n_data+n_anc)
         flip_qubits = [j for j in range(n_ancilla) if k_binary[n_ancilla-1-j] == '0']
         for q in flip_qubits:
             select_circ.x(q)
 
-        # Controls = all ancilla qubits (0..n_ancilla-1)
         ctrl_qubits = list(range(n_ancilla))
+
+        # --- coefficient phase: THE SIGN FIX (see build_simple_block_encoding) ---
+        _apply_coeff_phase(select_circ, ctrl_qubits, float(thetas[k]))
+
         for qubit_idx, pauli_char in enumerate(reversed(label)):
-            # FIX: Data qubits start at index n_ancilla
             data_qubit = n_ancilla + qubit_idx
             if data_qubit >= n_total:
                 break
@@ -190,7 +214,22 @@ def verify_block_encoding(be_circuit, H_matrix, alpha, n_data_qubits=6, n_ancill
 def build_simple_block_encoding(pauli_op, n_data_qubits=6):
     """
     Simplified block encoding for <=16 Pauli terms.
-    Uses QuantumRegister for consistent naming. Already correct.
+
+    SIGN / PHASE CORRECTNESS
+    ------------------------
+    PREPARE can only load non-negative amplitudes sqrt(|c_k| / alpha), so the
+    phase of each coefficient MUST be applied inside SELECT:
+
+        SELECT = sum_k |k><k| (x) ( e^{i theta_k} P_k ),   c_k = |c_k| e^{i theta_k}
+
+    which restores the invariant
+
+        <0_anc| U_BE |0_anc> = sum_k (|c_k|/alpha) e^{i theta_k} P_k = H / alpha.
+
+    Without this phase the circuit encodes sum_k |c_k| P_k. For the
+    negative-semidefinite GY94 generator that operator is spectrally exactly
+    -H, so the pipeline computes e^{-Ht} (amplification) instead of e^{+Ht}
+    (relaxation). Regression-tested in tests/test_block_encoding.py.
     """
     coeffs  = np.array(pauli_op.coeffs, dtype=complex)
     labels  = pauli_op.paulis.to_labels()
@@ -201,6 +240,7 @@ def build_simple_block_encoding(pauli_op, n_data_qubits=6):
 
     abs_coeffs = np.abs(coeffs)
     alpha      = float(np.sum(abs_coeffs))
+    thetas     = np.angle(coeffs)          # 0 for c_k > 0, pi for c_k < 0
     n_ancilla  = max(1, int(np.ceil(np.log2(max(n_terms, 2)))))
 
     n_anc_states = 2 ** n_ancilla
@@ -220,9 +260,15 @@ def build_simple_block_encoding(pauli_op, n_data_qubits=6):
         k_bits = format(k, f'0{n_ancilla}b')
         ctrl_q = list(range(n_ancilla))
 
+        # map |k> -> |1...1> so all-ones controls select term k
         for j in range(n_ancilla):
             if k_bits[n_ancilla-1-j] == '0':
                 be_circuit.x(anc[j])
+
+        # --- coefficient phase: THE SIGN FIX ---
+        # Applied before the Paulis so that all-identity terms (e.g. the
+        # dominant IIIIII term, c = -1.129) still receive their sign.
+        _apply_coeff_phase(be_circuit, ctrl_q, float(thetas[k]))
 
         for q_idx, p_char in enumerate(reversed(label)):
             if q_idx >= n_data_qubits: break
@@ -254,6 +300,7 @@ def build_simple_block_encoding(pauli_op, n_data_qubits=6):
         'n_total_gates': sum(gate_counts.values()),
         'gate_counts': gate_counts,
         'success_prob': 1.0 / (alpha ** 2),
+        'n_negative_coeffs': int(np.sum(np.real(coeffs) < 0)),
     }
     return be_circuit, alpha, info
 

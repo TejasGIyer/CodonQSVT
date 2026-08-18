@@ -40,26 +40,58 @@ from src.qsp_circuit import (
 )
 from src.trotter import classical_evolution
 
-
+from src.hamiltonian import reweight_to_distribution
 # =====================================================================
 # IMAGINARY-TIME COMBINATION (the only new function)
 # =====================================================================
 
 def combine_imagtime_amplitudes(cosh_amps, sinh_amps,
-                                norm_factor_cosh, norm_factor_sinh):
+                                norm_factor_cosh, norm_factor_sinh,
+                                sinh_sign=-1.0):
     """
-    Combine cosh and sinh channel amplitudes into the physical
-    imaginary-time evolved state.
+    Combine cosh and sinh channel amplitudes into the imaginary-time state.
 
-    Both target functions (cosh, sinh) are REAL on [-1, 0], so the
-    post-selected amplitude's REAL part carries the signal.
+    PARITY CORRECTION
+    -----------------
+    QSVT applies a definite-parity polynomial to the SINGULAR VALUES. For a
+    Hermitian A with eigenvalue lam:
 
-    Combined:
-        e^{tau*x} * |psi_0>  =  Re(cosh_amps) * norm_factor_cosh
-                                + Re(sinh_amps) * norm_factor_sinh
+        even P (cosh) -> P(lam)       ... sign-insensitive, no correction
+        odd  P (sinh) -> P(|lam|)     ... equals -P(lam) when lam < 0
+
+    H_tau here is strictly negative definite (lam_max = -0.1417 at tau=0.20),
+    so the sinh channel comes back globally negated and
+
+        cosh(t*lam) + sinh(t*|lam|) = exp(-t*lam)
+
+    i.e. the circuit evolves BACKWARDS. sinh_sign = -1 restores exp(+t*lam).
+
+    This global sign is exact ONLY because the spectrum does not cross zero.
+    Callers must verify that via assert_strictly_negative() below; on an
+    indefinite H_tau the correction is per-eigenvector and this formula fails.
     """
     return (np.real(cosh_amps) * norm_factor_cosh
-            + np.real(sinh_amps) * norm_factor_sinh)
+            + sinh_sign * np.real(sinh_amps) * norm_factor_sinh)
+
+
+def assert_strictly_negative(pauli_op, tol=-1e-12, raise_on_fail=True):
+    """
+    Guard for the global sinh_sign correction above.
+
+    Returns (ok, lam_max). Fails if H_tau has any eigenvalue >= 0, because
+    then the odd-channel sign is eigenvector-dependent and cannot be applied
+    as one global factor.
+    """
+    from qiskit.quantum_info import Operator
+    lam_max = float(np.max(np.linalg.eigvalsh(np.real(Operator(pauli_op).data))))
+    ok = lam_max < tol
+    if not ok and raise_on_fail:
+        raise ValueError(
+            f"H_tau has lam_max = {lam_max:+.4f} >= 0. The global sinh_sign "
+            f"correction in combine_imagtime_amplitudes is only valid for a "
+            f"strictly negative-definite H_tau. This threshold is unusable for "
+            f"imaginary-time QSVT as implemented.")
+    return ok, lam_max
 
 
 # =====================================================================
@@ -70,13 +102,19 @@ def run_qsvt_imagtime_experiment(be_circuit, phases_cosh, phases_sinh,
                                  norm_factor_cosh, norm_factor_sinh,
                                  aae_circuit, Q, pi_initial, sense_codons,
                                  n_data_qubits=6, n_be_ancilla=3,
-                                 t=0.5, verbose=True, pauli_op=None):
+                                 t=0.5, verbose=True, pauli_op=None,
+                                 pi_eq=None):
     """
     Run the QSVT imaginary-time experiment using statevector simulation.
 
     Uses the SAME build_qsp_circuit as the cos/sin pipeline — only the
     angles and the combination formula differ.
     """
+    if pauli_op is None:
+        raise ValueError(
+            "pauli_op is required to verify that the global sinh sign "
+            "correction is valid for this generator")
+    assert_strictly_negative(pauli_op)
     n_codons = len(sense_codons)
 
     # --- Build cosh circuit (reuses build_qsp_circuit) ---
@@ -138,23 +176,11 @@ def run_qsvt_imagtime_experiment(be_circuit, phases_cosh, phases_sinh,
     else:
         evolved_probs_normalized = np.zeros(n_codons)
 
-    # --- Reweighted readout (sqrt(p / pi_eq) prescription) ---
-    # The symmetrization H = D^{1/2} Q D^{-1/2} means measured probs
-    # contain a pi_eq bias. The correct readout is:
-    #   a_i = sqrt(p_i / pi_eq_i), then normalize sum(a_i) = 1
-    # This recovers pi_i(t) for general initial conditions.
-    pi_eq = pi_initial  # in our pipeline, pi_initial IS pi_eq
-    reweighted = np.zeros(n_codons)
-    for i in range(n_codons):
-        if pi_eq[i] > 1e-15 and evolved_probs_normalized[i] > 0:
-            reweighted[i] = np.sqrt(evolved_probs_normalized[i] / pi_eq[i])
-        else:
-            reweighted[i] = 0.0
-    rw_sum = float(np.sum(reweighted))
-    if rw_sum > 1e-12:
-        probs_reweighted = reweighted / rw_sum
-    else:
-        probs_reweighted = np.zeros(n_codons)
+    # --- Reweighted readout: exact inverse of the symmetrization ---
+    #   pi_i(t) ~ sqrt(p_i * pi_eq_i)   (see src.hamiltonian docstring)
+    pi_eq_used = pi_initial if pi_eq is None else pi_eq
+    probs_reweighted = reweight_to_distribution(
+        evolved_probs_normalized, pi_eq_used, n_codons)
 
     # --- Classical reference ---
     pi_classical, P_t = classical_evolution(Q, pi_initial, t)
@@ -180,7 +206,7 @@ def run_qsvt_imagtime_experiment(be_circuit, phases_cosh, phases_sinh,
     f_bhat_raw = bhattacharyya_fidelity(pi_classical, evolved_probs_normalized)
     f_hell_raw = hellinger_fidelity(pi_classical, evolved_probs_normalized)
 
-    # Method B: sqrt(p/pi_eq) reweighted
+    # Inverse symmetrization: sqrt(p * pi_eq), then normalize
     f_bhat_rw = bhattacharyya_fidelity(pi_classical, probs_reweighted)
     f_hell_rw = hellinger_fidelity(pi_classical, probs_reweighted)
 
@@ -197,7 +223,7 @@ def run_qsvt_imagtime_experiment(be_circuit, phases_cosh, phases_sinh,
         print(f"      Bhattacharyya:  {f_bhat_raw:.6f}")
         print(f"      Hellinger:      {f_hell_raw:.6f}")
         print(f"      TV distance:    {tv_raw:.6f}")
-        print(f"    METHOD B (sqrt(p/pi_eq) reweighted):")
+        print(f"    inverse symmetrization (sqrt(p * pi_eq), normalized):")
         print(f"      Bhattacharyya:  {f_bhat_rw:.6f}")
         print(f"      Hellinger:      {f_hell_rw:.6f}")
         print(f"      TV distance:    {tv_rw:.6f}")
@@ -258,7 +284,7 @@ def print_qsvt_imagtime_report(results, sense_codons):
     print(f"      Bhattacharyya = {results['f_bhat_raw']:.6f}")
     print(f"      Hellinger     = {results['f_hell_raw']:.6f}")
     print(f"      TV distance   = {results['tv_raw']:.6f}")
-    print(f"    METHOD B (sqrt(p/pi_eq) reweighted):")
+    print(f"    inverse symmetrization (sqrt(p * pi_eq), normalized):")
     print(f"      Bhattacharyya = {results['f_bhat_rw']:.6f}")
     print(f"      Hellinger     = {results['f_hell_rw']:.6f}")
     print(f"      TV distance   = {results['tv_rw']:.6f}")
@@ -289,8 +315,7 @@ if __name__ == "__main__":
     from src.block_encoding import build_simple_block_encoding, print_block_encoding_report
     from src.qsvt_angles_imagtime import compute_qsvt_angles_imagtime, print_qsvt_angles_report
 
-    KAPPA = 1.8425
-    OMEGA = 0.0599
+    
 
     print("=" * 70)
     print("  QSVT IMAGINARY-TIME EVOLUTION  --  STANDALONE TEST")
@@ -299,24 +324,22 @@ if __name__ == "__main__":
     # [1] Build Q + H + Pauli (same as QSP pipeline)
     print("\n  [1/4] Building Q + Hamiltonian + Pauli decomposition...")
     codon_freqs = pooled_codon_frequencies()
-    best_v, min_err = 50.0, float('inf')
-    for test_v in np.linspace(5, 200, 391):
-        err = abs(calculate_implied_omega(codon_freqs, KAPPA, test_v) - OMEGA)
-        if err < min_err:
-            min_err, best_v = err, test_v
+    from src.constants import GY94_KAPPA, GY94_OMEGA, GY94_V, AAE_N_LAYERS
+    KAPPA, OMEGA = GY94_KAPPA, GY94_OMEGA
+    codon_freqs = pooled_codon_frequencies()
     Q, sense_codons, pi, q_info = build_gy94_rate_matrix(
-        codon_freqs, kappa=KAPPA, V=best_v)
+        codon_freqs, kappa=KAPPA, V=GY94_V)
     H, h_info = symmetrize_to_hamiltonian(Q, pi, n_qubits=6)
     pauli_full, _ = decompose_to_pauli(H, n_qubits=6, threshold=1e-6)
-    pauli_op, n_kept = filter_pauli_op(pauli_full, threshold=0.075)
+    pauli_op, n_kept = filter_pauli_op(pauli_full, threshold=0.20)
     alpha = float(np.sum(np.abs(pauli_op.coeffs)))
     print(f"    Pauli terms: {n_kept}, alpha = {alpha:.4f}")
 
     # [2] Load (or train) AAE — cached params reused across runs
     print("\n  [2/4] Loading (or training) AAE...")
     s1 = build_gapdh_register(n_qubits=6)
-    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh.json')
-    s2 = get_aae_circuit(s1, aae_json, n_layers=6, n_trials=3, maxiter=3000)
+    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh_probability.json')
+    s2 = get_aae_circuit(s1, aae_json, n_layers=AAE_N_LAYERS, n_trials=3, maxiter=3000)
     print(f"    Overlap: {s2['overlap']:.6f}")
 
     # [3] Block encoding (same as QSP pipeline)

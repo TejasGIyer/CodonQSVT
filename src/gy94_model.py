@@ -171,7 +171,7 @@ def build_gy94_rate_matrix(codon_frequencies, kappa=None, V=None):
     """Build the GY94 rate matrix Q (61x61).
 
     Defaults (kappa, V) are pulled from src.constants (the single source of
-    truth, calibrated to the paper: kappa=1.8425, V=13.5) when not supplied.
+    truth: kappa=1.8425, V=13.6853) when not supplied.
     This removes the previous hard-coded (1.45, 43.99) defaults that did not
     match the paper and could silently produce a different Hamiltonian.
     """

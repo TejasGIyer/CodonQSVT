@@ -10,7 +10,7 @@ Instead we:
   3. Use the statevector reference to recover signed amplitudes from
      shot counts (sign recovery from SV calibration)
   4. Combine: evolved = Re(cosh_amps)*norm_cosh + Re(sinh_amps)*norm_sinh
-  5. Apply reweighting: a_i = sqrt(p_i / pi_eq_i), normalize
+  5. Invert symmetrization: a_i = sqrt(p_i * pi_eq_i), normalize
   6. Compare with both Bhattacharyya and Hellinger fidelity
 
 Usage:
@@ -61,14 +61,16 @@ def hellinger_fidelity(p, q):
     h2 = 0.5 * float(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2))
     return float(np.clip(1.0 - h2, 0.0, 1.0))
 
+from src.hamiltonian import reweight_to_distribution
+
+
 def reweight_probs(probs, pi_eq, n_codons=61):
-    """Apply sqrt(p/pi_eq) reweighting and normalize."""
-    rw = np.zeros(n_codons)
-    for i in range(n_codons):
-        if pi_eq[i] > 1e-15 and probs[i] > 0:
-            rw[i] = np.sqrt(probs[i] / pi_eq[i])
-    s = float(np.sum(rw))
-    return rw / s if s > 1e-12 else np.zeros(n_codons)
+    """Thin wrapper kept for call-site compatibility.
+
+    Delegates to the single canonical implementation so the four copies of
+    this function cannot drift apart again.
+    """
+    return reweight_to_distribution(probs, pi_eq, n_codons)
 
 
 # =====================================================================
@@ -351,7 +353,7 @@ if __name__ == "__main__":
 
     print("\n  [2/5] Loading (or training) AAE...")
     s1 = build_gapdh_register(n_qubits=6)
-    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh.json')
+    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh_probability.json')
     s2 = get_aae_circuit(s1, aae_json, n_layers=6, n_trials=3, maxiter=3000)
     print(f"    Overlap: {s2['overlap']:.6f}")
 

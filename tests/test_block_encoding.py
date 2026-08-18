@@ -127,6 +127,55 @@ def test_postselection_matches_statevector_extraction():
     print(f"[block@psi vs H/alpha@psi] err={err:.2e}")
     assert err < 1e-9
 
+def test_simple_be_negative_coefficient():
+    """REGRESSION: a single negative coefficient must be encoded with its sign.
+
+    This is the case the original suite never covered. Every test used strictly
+    positive coefficients, so an unsigned PREPARE/SELECT passed 5/5 while
+    encoding sum|c_k|P_k instead of sum c_k P_k.
+    """
+    op = SparsePauliOp.from_list([("Z", -0.6), ("X", 0.8)])
+    err, info, alpha = _check(op, 1, build_simple_block_encoding)
+    print(f"[1q,neg] n_anc={info['n_ancilla']} alpha={alpha:.4f} err={err:.2e}")
+    assert err < 1e-9
+
+
+def test_be_mixed_signs_including_identity():
+    """Mixed signs with a dominant NEGATIVE identity term.
+
+    Mirrors the real GY94 operator, whose largest term is IIIIII with
+    c = -1.1289. An all-identity term applies no Pauli gates, so its sign is
+    only carried by the ancilla phase -- easy to drop.
+    """
+    op = SparsePauliOp.from_list([("II", -0.5), ("ZI", 0.3),
+                                  ("IX", -0.2), ("XX", 0.15)])
+    for builder in (build_simple_block_encoding, build_lcu_block_encoding):
+        err, info, alpha = _check(op, 2, builder)
+        print(f"[mixed,{builder.__name__}] err={err:.2e}")
+        assert err < 1e-9
+
+
+def test_be_does_not_encode_absolute_values():
+    """Explicitly assert the block is NOT sum|c_k|P_k/alpha.
+
+    Guards against a 'fix' that silently reverts: without the phase, the error
+    against |H|/alpha is ~0 while the error against H/alpha is ~0.87.
+    """
+    op = SparsePauliOp.from_list([("II", -0.5), ("ZI", 0.3), ("IX", -0.2)])
+    n_data = 2
+    alpha = float(np.sum(np.abs(op.coeffs)))
+    be, _, info = build_simple_block_encoding(op, n_data_qubits=n_data)
+    blk = _block_from_unitary(Operator(be).data, info['n_ancilla'], n_data)
+
+    H_signed = Operator(op).data
+    H_abs = Operator(SparsePauliOp(op.paulis, np.abs(op.coeffs))).data
+
+    err_signed = float(np.max(np.abs(blk - H_signed / alpha)))
+    err_abs = float(np.max(np.abs(blk - H_abs / alpha)))
+    print(f"[abs-guard] err_signed={err_signed:.2e}  err_abs={err_abs:.2e}")
+    assert err_signed < 1e-9, "block encoding lost coefficient signs"
+    assert err_abs > 1e-3, "block encoding is encoding absolute values"
+
 
 def _run_all():
     tests = [
@@ -135,6 +184,9 @@ def _run_all():
         test_lcu_be_matches_simple,
         test_verify_block_encoding_helper_agrees,
         test_postselection_matches_statevector_extraction,
+        test_simple_be_negative_coefficient,
+        test_be_mixed_signs_including_identity,
+        test_be_does_not_encode_absolute_values,
     ]
     print("=" * 70)
     print("  BLOCK-ENCODING CORRECTNESS:  <0_anc| U_BE |0_anc> == H / alpha")

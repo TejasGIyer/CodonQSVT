@@ -206,24 +206,32 @@ def sweep_trotter_steps(pauli_op, t, step_range=(1, 2, 3, 5), order=1):
 def classical_evolution(Q, pi_initial, t):
     """
     Classically compute the evolved codon distribution after time t.
-    Uses scipy matrix exponential:  pi(t) = e^{Qt} @ pi(0)
 
-    Parameters
-    ----------
-    Q          : np.ndarray (61, 61)
-    pi_initial : np.ndarray (61,)
-    t          : float
+    CONVENTION (corrected)
+    ----------------------
+    Q is a generator with ROWS summing to zero (Q @ 1 = 0), so pi is the LEFT
+    null vector (pi^T Q = 0). The transition matrix P_t = expm(Q t) satisfies
+    P_t[i, j] = Prob(X_t = j | X_0 = i), hence a distribution propagates as
+
+        pi(t)^T = pi(0)^T P_t     i.e.     pi(t) = P_t^T pi(0).
+
+    The previous code used P_t @ pi(0), which is not the distribution update:
+    it does not preserve normalisation (sum = 1.259 at t = 0.5) and does not
+    fix the stationary distribution (||P_t @ pi_eq - pi_eq||_1 = 0.389 at
+    t = 0.5, versus 1.7e-16 for the transpose).
 
     Returns
     -------
     pi_t : np.ndarray (61,)
-    P_t  : np.ndarray (61, 61)
+    P_t  : np.ndarray (61, 61)   transition matrix, rows = source state
     """
     import scipy.linalg
     P_t  = scipy.linalg.expm(Q * t)
-    pi_t = P_t @ pi_initial
+    pi_t = P_t.T @ pi_initial
     pi_t = np.clip(pi_t, 0, None)
-    pi_t /= pi_t.sum()
+    s = pi_t.sum()
+    if s > 0:
+        pi_t /= s
     return pi_t, P_t
 
 

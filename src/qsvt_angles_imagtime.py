@@ -177,6 +177,46 @@ def compute_qsvt_angles_imagtime(alpha, t, epsilon=1e-3,
     return phases_cosh, phases_sinh, info
 
 
+def validate_reconstruction(coeffs_even, coeffs_odd, norm_factor_cosh,
+                            norm_factor_sinh, x_lo, x_hi, tol=0.02,
+                            raise_on_fail=False):
+    """
+    Guard against the 2*cosh(tau) error-amplification blowup.
+
+    The physical amplitude is recovered as P_even*nf_c + P_odd*nf_s. Because
+    nf ~ 2*cosh(tau) grows exponentially in tau while e^(tau*x) SHRINKS over the
+    (negative) spectrum, the reconstruction multiplies the polynomial's ABSOLUTE
+    error by up to 5.4e5 at t=5. Measured relative error of the reconstruction:
+
+        t=1.0  tau=2.64   deg 14   2cosh=1.4e1   rel err 1.7e-10   ok
+        t=3.0  tau=7.92   deg 22   2cosh=2.8e3   rel err 3.0e-06   ok
+        t=5.0  tau=13.20  deg 30   2cosh=5.4e5   rel err 1.3e-03   marginal
+                          -> observed norm^2 = 278.6 vs true 2.15e-04
+
+    Call this before trusting any result at large t.
+    """
+    import numpy.polynomial.chebyshev as _cheb
+    xs = np.linspace(x_lo, x_hi, 2001)
+    approx = (_cheb.chebval(xs, coeffs_even) * norm_factor_cosh
+              + _cheb.chebval(xs, coeffs_odd) * norm_factor_sinh)
+    exact = np.exp(np.arccosh(max(norm_factor_cosh / 2.0, 1.0)) * xs)
+    rel = float(np.max(np.abs(approx - exact) / np.maximum(np.abs(exact), 1e-300)))
+    ok = rel <= tol
+    if not ok and raise_on_fail:
+        raise ValueError(
+            f"Imaginary-time reconstruction unreliable: relative error {rel:.2e} "
+            f"exceeds {tol:.2e}. The normalisation 2*cosh(tau) is amplifying "
+            f"polynomial error beyond the signal. Reduce t or raise the degree.")
+    return ok, rel
+
+
+T_MAX_RELIABLE = 3.0
+"""Largest t at which the cosh/sinh reconstruction is numerically trustworthy
+at epsilon=1e-3. Beyond this the 2*cosh(tau) prefactor amplifies phase-finding
+error past the signal. Empirically t=5 gives norm^2 = 278.6 where theory says
+2.15e-04. Do NOT report results above this without re-validating."""
+
+
 def print_qsvt_angles_report(phases_cosh, phases_sinh, info):
     print("\n" + "=" * 70)
     print("  QSVT PHASE ANGLES  (imaginary-time evolution e^{Ht})")

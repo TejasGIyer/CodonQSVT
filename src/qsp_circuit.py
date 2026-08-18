@@ -1017,29 +1017,22 @@ if __name__ == "__main__":
     from src.qsp_angles            import compute_qsp_angles
     from src.block_encoding        import build_simple_block_encoding, print_block_encoding_report
 
-    KAPPA = 1.8425
-    OMEGA = 0.0599
+    from src.constants import GY94_KAPPA, GY94_OMEGA, GY94_V
+    KAPPA, OMEGA, V = GY94_KAPPA, GY94_OMEGA, GY94_V
     LNL   = -2930.4333
     print("=" * 70)
     print("  QSP FULL PIPELINE — GAPDH (pyqsp-based, verified recipe)")
     print("=" * 70)
     for name, seq in ALL_SEQUENCES.items():
         print(f"  {name:>6}: {len(seq)} nt | {len(seq)//3} codons")
-    print(f"  Model:  kappa={KAPPA}  omega={OMEGA}  lnL={LNL}")
+    print(f"  Model:  kappa={KAPPA}  omega={OMEGA}  V={V}  lnL={LNL}")
 
     print("\n  [1/6] Building pipeline...")
     codon_freqs = pooled_codon_frequencies()
     print(f"  Pooled codon frequencies: {len(codon_freqs)} unique sense codons")
-    best_v = 50.0
-    min_err = float('inf')
-    for test_v in np.linspace(5, 200, 391):
-        implied = calculate_implied_omega(codon_freqs, KAPPA, test_v)
-        err = abs(implied - OMEGA)
-        if err < min_err:
-            min_err = err
-            best_v = test_v
-    print(f"  -> Best V = {best_v:.4f}  (omega error = {min_err:.6f})")
-    Q, sense_codons, pi, q_info = build_gy94_rate_matrix(codon_freqs, kappa=KAPPA, V=best_v)
+    # V is frozen in src/constants.py (brentq-calibrated). Do NOT re-derive it
+    # here: the old inline grid drifted between entry points.
+    Q, sense_codons, pi, q_info = build_gy94_rate_matrix(codon_freqs, kappa=KAPPA, V=V)
     H, h_info = symmetrize_to_hamiltonian(Q, pi, n_qubits=6)
     pauli_full, _ = decompose_to_pauli(H, n_qubits=6, threshold=1e-6)
     THRESHOLD = 0.2
@@ -1049,7 +1042,7 @@ if __name__ == "__main__":
 
     print("\n  [2/6] Loading (or training) AAE circuit on GAPDH codon distribution...")
     s1 = build_gapdh_register(n_qubits=6)
-    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh.json')
+    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh_probability.json')
     s2 = get_aae_circuit(s1, aae_json, n_layers=6, n_trials=3, maxiter=3000)
     print(f"  Overlap: {s2['overlap']:.6f}")
 
@@ -1156,4 +1149,3 @@ if __name__ == "__main__":
               f"{mc['depth']:>11d} {mc['two_qubit_gates']:>8d} {ps:>8.4f}")
 
     print(f"\n  GAPDH QSP pipeline complete.")
-
