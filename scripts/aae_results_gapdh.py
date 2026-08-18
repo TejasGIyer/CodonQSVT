@@ -42,7 +42,7 @@ def main():
     parser.add_argument('--maxiter', type=int, default=5000,
                         help='Max L-BFGS-B iterations per trial (default: 5000).')
     parser.add_argument('--out', type=str,
-                        default=os.path.join(RESULTS_DIR, 'best_aae_params_gapdh.json'),
+                        default=os.path.join(RESULTS_DIR, 'best_aae_params_gapdh_probability.json'),
                         help='JSON output path for trained params.')
     parser.add_argument('--skip-noisy', action='store_true',
                         help='Skip the FakeQuebec noisy fidelity step (faster iteration).')
@@ -195,11 +195,12 @@ def main():
     print(f"\n" + "=" * 78)
     print(f"  ENCODING COMPARISON TABLE (all transpiled for FakeQuebec)")
     print(f"=" * 78)
-    print(f"\n  {'Encoding':<25} {'Qubits':>7} {'Depth':>7} {'2Q gates':>9} {'Total':>7} {'SWAPs':>6} {'Fidelity':>9}")
+    print(f"\n  {'Encoding':<25} {'Qubits':>7} {'Depth':>7} {'2Q gates':>9} {'Total':>7} {'SWAPs':>6} {'F_H':>9}")
     print(f"  {'-'*25} {'-'*7} {'-'*7} {'-'*9} {'-'*7} {'-'*6} {'-'*9}")
     print(f"  {'Amplitude (Mottonen)':<25} {n_q:>7} {m_depth:>7} {m_2q:>9} {m_total:>7} {m_swaps:>6} {'1.000000':>9}")
     print(f"  {'Angle (Ry)':<25} {n_unique:>7} {a_depth:>7} {a_2q:>9} {a_total:>7} {a_swaps:>6} {'1.000000':>9}")
-    print(f"  {'AAE (Brickwall, L=6)':<25} {n_q:>7} {aae_d:>7} {aae_2q:>9} {aae_t:>7} {aae_sw:>6} {quebec_hf:>9.6f}")
+    aae_label = f"AAE (Brickwall, L={AAE_N_LAYERS})"
+    print(f"  {aae_label:<25} {n_q:>7} {aae_d:>7} {aae_2q:>9} {aae_t:>7} {aae_sw:>6} {quebec_hf:>9.6f}")
 
     # === 6. Save results ===
     results = {
@@ -218,6 +219,7 @@ def main():
              'p_achieved': float(pa), 'delta': float(d)}
             for c, aa, pt, pa, d, _ in entries
         ],
+        'encoding_comparison_metric': 'Hellinger F_H = 1 - H^2 = sum_i sqrt(p_i q_i)',
         'encoding_comparison': {
             'mottonen': {'qubits': n_q, 'depth': m_depth, 'two_q_gates': m_2q,
                          'total_gates': m_total, 'swaps': m_swaps, 'fidelity': 1.0},

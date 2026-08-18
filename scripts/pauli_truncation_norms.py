@@ -48,13 +48,17 @@ from src.hamiltonian import (
 # =====================================================================
 # CONFIG — match the rest of the pipeline
 # =====================================================================
-KAPPA      = 1.8425
-OMEGA      = 0.0599
-N_QUBITS   = 6
-THRESHOLDS = [0.2, 0.1, 0.075, 0.05]   # the four reported in QSVT_RESULTS
+from src.constants import GY94_KAPPA, GY94_OMEGA, GY94_V, N_DATA_QUBITS, PAULI_THRESHOLDS
 
-# Threshold for the underlying "full" decomposition (numerical floor).
-# Anything dropped here is below machine-level relevance.
+KAPPA      = GY94_KAPPA
+OMEGA      = GY94_OMEGA
+N_QUBITS   = N_DATA_QUBITS
+THRESHOLDS = list(PAULI_THRESHOLDS)
+
+# Numerical floor for the "full" reference decomposition. NOTE: Qiskit's
+# SparsePauliOp.from_operator applies its own internal chop that is coarser
+# than this and cannot be overridden via atol -- see the effective-floor
+# diagnostic printed below.
 FLOOR_THRESHOLD = 1e-8
 
 
@@ -95,15 +99,11 @@ def main():
     # ---------- Build H exactly as the rest of the pipeline does ----------
     print("\n[1/3] Building GY94 + symmetrizing to H...")
     codon_freqs = pooled_codon_frequencies()
-    best_v, min_err = 50.0, float('inf')
-    for test_v in np.linspace(5, 200, 391):
-        err = abs(calculate_implied_omega(codon_freqs, KAPPA, test_v) - OMEGA)
-        if err < min_err:
-            min_err, best_v = err, test_v
-    print(f"   V = {best_v:.4f}  (omega err = {min_err:.2e})")
+    print(f"   V = {GY94_V} (frozen, brentq-calibrated in src/constants.py)")
 
     Q, sense_codons, pi, _ = build_gy94_rate_matrix(
-        codon_freqs, kappa=KAPPA, V=best_v)
+        codon_freqs, kappa=KAPPA, V=GY94_V)
+
     H, h_info = symmetrize_to_hamiltonian(Q, pi, n_qubits=N_QUBITS)
     print(f"   H shape = {H.shape},  ||H||_F = {h_info['frobenius_norm']:.6f}")
     print(f"   ||H||_2 = {h_info['spectral_norm']:.6f}  (spectral norm)")
@@ -115,15 +115,30 @@ def main():
     print(f"   {p_info['n_significant_terms']} Pauli terms kept (of {p_info['n_total_pauli_terms']} total)")
     print(f"   sum |c_k| (1-norm = alpha at this floor) = {p_info['total_pauli_norm']:.6f}")
 
-    # Sanity check: reconstructing H from the full Pauli op should reproduce H
+    # Sanity check. NOTE: Qiskit's from_operator applies an internal chop that
+    # is coarser than FLOOR_THRESHOLD and is not controllable via atol. On this
+    # H it returns 1022 terms where an exact tr(P_k H)/2^n decomposition gives
+    # 1408, dropping 386 terms whose largest magnitude is ~9.8e-06.
+    #
+    # This is BENIGN for every reported threshold (0.05 ... 0.20), which sit
+    # four orders of magnitude above the dropped terms: the truncation table is
+    # identical whether computed from the Qiskit or the exact decomposition.
+    # We report the effective floor rather than claiming FLOOR_THRESHOLD.
     H_reconstructed = H_from_pauli_op(pauli_full)
     recon_err_F = frobenius_norm(H - H_reconstructed)
     recon_err_2 = spectral_norm(H - H_reconstructed)
-    print(f"   Reconstruction error ||H - H_full||_F = {recon_err_F:.3e}")
+    eff_floor = float(np.min(np.abs(np.real(pauli_full.coeffs))))
+    print(f"   Effective floor (smallest retained |c_k|) = {eff_floor:.3e}")
+    print(f"   Reconstruction error ||H - H_full||_F = {recon_err_F:.3e} "
+          f"({recon_err_F / h_info['frobenius_norm']:.2e} relative)")
     print(f"   Reconstruction error ||H - H_full||_2 = {recon_err_2:.3e}")
-    if recon_err_F > 1e-6:
-        print("   WARNING: large reconstruction error; results below treat")
-        print("            H_full as the reference, not the original H.")
+    if eff_floor > 0.1 * min(THRESHOLDS):
+        print("   WARNING: the effective floor is within an order of magnitude")
+        print("            of the smallest reported threshold -- truncation")
+        print("            results may be contaminated by the decomposition chop.")
+    else:
+        print(f"   OK: effective floor is {min(THRESHOLDS) / eff_floor:.0f}x below the "
+              f"smallest reported threshold ({min(THRESHOLDS)}).")
 
     # ---------- Per-threshold truncation errors ----------
     print(f"\n[3/3] Computing truncation errors for each threshold...")
@@ -197,7 +212,7 @@ def main():
         'config': {
             'kappa':    KAPPA,
             'omega':    OMEGA,
-            'V':        best_v,
+            'V':        GY94_V,
             'n_qubits': N_QUBITS,
             'floor_threshold': FLOOR_THRESHOLD,
             'H_norm_2': H_ref_2,

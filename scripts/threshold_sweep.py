@@ -1,13 +1,16 @@
 """
-threshold_sweep.py -- Four-threshold QSVT fidelity sweep (Table 9 regeneration)
-================================================================================
-Regenerates the central non-monotonic truncation result under the CORRECTED
-pipeline (kappa=1.8425, V=13.5, lam_min spectral padding). For each Pauli
+threshold_sweep.py -- QSVT threshold-validity audit
+====================================================
+Audits the historical four truncation thresholds under the corrected pipeline
+(kappa=1.8425, V=13.6853, lam_min spectral padding). For each Pauli
 truncation threshold it runs the full imaginary-time QSVT pipeline at a fixed
 evolution time t and reports the end-to-end Hellinger / Bhattacharyya fidelity
 against the classical CTMC reference e^{Qt} pi(0).
 
-It also logs, in the SAME pass, the columns needed for:
+Only strictly negative-definite truncated generators are simulated because the
+global sinh-channel sign correction is invalid for a spectrum crossing zero.
+Rejected thresholds and their reasons are written to the output. For valid
+thresholds the script also logs the columns needed for:
   * Table 6 (block encoding): K, alpha, BE ancilla, total qubits, logical
     depth, and the EMPIRICAL post-selection probability (cosh & sinh) measured
     from the statevector -- not the 1/alpha^2 proxy.
@@ -51,7 +54,7 @@ from src.hamiltonian import (
 from src.block_encoding import build_simple_block_encoding
 from src.qsp_circuit import build_qsp_circuit, extract_codon_amps_complex
 from src.qsvt_angles_imagtime import compute_qsvt_angles_imagtime
-from src.qsvt_circuit_imagtime import combine_imagtime_amplitudes
+from src.qsvt_circuit_imagtime import combine_imagtime_amplitudes, assert_strictly_negative
 from src.trotter import classical_evolution
 from src.constants import (
     GY94_KAPPA, GY94_OMEGA, GY94_V, N_DATA_QUBITS, N_SENSE_CODONS,
@@ -87,13 +90,16 @@ def total_variation(p, q):
     return 0.5 * float(np.sum(np.abs(p - q)))
 
 
-def reweight_probs(probs, pi_eq, n_codons=N_SENSE_CODONS):
-    rw = np.zeros(n_codons)
-    for i in range(n_codons):
-        if pi_eq[i] > 1e-15 and probs[i] > 0:
-            rw[i] = np.sqrt(probs[i] / pi_eq[i])
-    s = float(np.sum(rw))
-    return rw / s if s > 1e-12 else np.zeros(n_codons)
+from src.hamiltonian import reweight_to_distribution
+
+
+def reweight_probs(probs, pi_eq, n_codons=61):
+    """Thin wrapper kept for call-site compatibility.
+
+    Delegates to the single canonical implementation so the four copies of
+    this function cannot drift apart again.
+    """
+    return reweight_to_distribution(probs, pi_eq, n_codons)
 
 
 def postselection_probability(sv_data, n_be_ancilla):
@@ -113,6 +119,9 @@ def postselection_probability(sv_data, n_be_ancilla):
 def run_one_threshold(pauli_full, aae_circuit, Q, pi, pi_eq, threshold, t,
                       epsilon, n_codons=N_SENSE_CODONS):
     pauli_op, n_kept = filter_pauli_op(pauli_full, threshold)
+    assert_strictly_negative(pauli_op)
+    from src.constants import assert_dissipative
+    is_dissipative, lam_max = assert_dissipative(pauli_op)
     be_circuit, alpha, be_info = build_simple_block_encoding(
         pauli_op, n_data_qubits=N_DATA_QUBITS)
     n_be = be_info['n_ancilla']
@@ -163,6 +172,8 @@ def run_one_threshold(pauli_full, aae_circuit, Q, pi, pi_eq, threshold, t,
     tv_rw = total_variation(pi_cl, probs_rw)
 
     return {
+        'lam_max_H_tau': float(lam_max),
+        'is_dissipative': bool(is_dissipative),
         # --- Table 9 (fidelity) ---
         'threshold': float(threshold),
         'K': int(n_kept),
@@ -193,7 +204,7 @@ def run_one_threshold(pauli_full, aae_circuit, Q, pi, pi_eq, threshold, t,
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Four-threshold QSVT fidelity sweep")
+    ap = argparse.ArgumentParser(description="QSVT truncation-threshold validity audit")
     ap.add_argument('--t', type=float, default=T_EVOL_DEFAULT,
                     help=f"evolution time (default {T_EVOL_DEFAULT})")
     ap.add_argument('--thresholds', type=float, nargs='+',
@@ -204,7 +215,7 @@ def main():
     args = ap.parse_args()
 
     print("=" * 78)
-    print("  FOUR-THRESHOLD QSVT FIDELITY SWEEP  (Table 9 regeneration)")
+    print("  QSVT TRUNCATION-THRESHOLD VALIDITY AUDIT")
     print(f"  t = {args.t},  thresholds = {args.thresholds}")
     print("=" * 78)
 
@@ -221,7 +232,7 @@ def main():
 
     print(f"\n[2/3] Loading {args.n_layers}-layer AAE cache...")
     s1 = build_gapdh_register(n_qubits=N_DATA_QUBITS)
-    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh.json')
+    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh_probability.json')
     s2 = get_aae_circuit(s1, aae_json, n_layers=args.n_layers)
     aae_circuit = s2['circuit']
     print(f"  AAE overlap O = {float(s2['overlap']):.4f}  (n_layers = {s2['n_layers']})")
@@ -234,7 +245,7 @@ def main():
     print(header)
     print("  " + "-" * (len(header) - 2))
 
-    rows = []
+    rows, skipped = [], []
     for thr in sorted(args.thresholds, reverse=True):
         t0 = time.time()
         try:
@@ -242,6 +253,7 @@ def main():
                                   thr, args.t, args.epsilon)
         except Exception as e:
             print(f"  threshold {thr}: FAILED -- {e}")
+            skipped.append({'threshold': float(thr), 'reason': str(e)})
             continue
         dt = time.time() - t0
         r['eval_time_s'] = dt
@@ -254,6 +266,19 @@ def main():
               f"{r['cosh_circuit_depth']:>8d}  {r['sinh_circuit_depth']:>8d}"
               f"  ({dt:.1f}s)")
 
+
+    nondiss = [r for r in rows if not r['is_dissipative']]
+    if nondiss:
+        print("\n  *** WARNING: truncation broke negative-semidefiniteness at "
+              f"{len(nondiss)} of {len(rows)} thresholds:")
+        for r in nondiss:
+            print(f"      thr={r['threshold']:.3f}  K={r['K']:>3d}  "
+                  f"lam_max = {r['lam_max_H_tau']:+.4f}")
+        print("  At these thresholds e^(H_tau t) AMPLIFIES along the positive")
+        print("  mode, so norm decay and 'dissipative dynamics' claims do not")
+        print("  hold. Either restrict the sweep to dissipative thresholds or")
+        print("  state this explicitly in the manuscript.")
+
     # Identify the optimum
     if rows:
         best = max(rows, key=lambda r: r['f_hellinger_rw'])
@@ -264,9 +289,15 @@ def main():
         monotone = all(
             rows[i]['f_hellinger_rw'] >= rows[i+1]['f_hellinger_rw']
             for i in range(len(rows) - 1))
-        if best['threshold'] not in (rows[0]['threshold'], rows[-1]['threshold']):
-            print("  -> NON-MONOTONIC: optimum is at an INTERIOR threshold "
-                  "(the truncation paradox survives the corrected pipeline).")
+        if len(rows) == 1:
+            r = rows[0]
+            print(f"  Only threshold {r['threshold']} yields a negative-definite H_tau,")
+            print(f"  so no ordering across thresholds can be reported. "
+                  f"F_H = {r['f_hellinger_rw']:.4f}")
+            print(f"  at K = {r['K']}, alpha = {r['alpha']:.4f}.")
+            print("  The finding here is the CONSTRAINT: Pauli truncation destroys the")
+            print("  negative-definiteness that imaginary-time QSVT requires, leaving a")
+            print("  single usable operating point. Report this, not a fidelity trend.")
         elif monotone:
             print("  -> MONOTONIC in threshold: fidelity improves toward one end; "
                   "the interior-optimum 'paradox' does NOT reproduce here.")
@@ -285,9 +316,11 @@ def main():
                 'n_layers': args.n_layers, 'aae_overlap': float(s2['overlap']),
                 'n_qubits': N_DATA_QUBITS,
                 'zero_eigenvalues': int(h_info['n_zero_eigenvalues']),
-                'readout': 'sqrt(p/pi_eq) reweight (METHOD B); near-equilibrium AAE init',
+                'readout': 'sqrt(p * pi_eq) inverse-symmetrization reweight; '
+                           'near-equilibrium AAE init',
             },
             'rows': rows,
+            'skipped_thresholds': skipped,
         }, f, indent=2, default=str)
     print(f"\n  Results saved -> {out_path}")
 

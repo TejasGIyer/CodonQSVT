@@ -25,15 +25,15 @@ two controls:
   (ii) F_H(pi_cl(t), pi(0))      -- how far the classical state has moved from
        the initial delta. This FALLS from 1 as the state relaxes.
 
-The QSVT curve F_H(pi_cl(t), QSVT(t)) should stay high THROUGHOUT, including
-the early, far-from-equilibrium times where control (i) is low -- that is the
-signature we could not get from the near-equilibrium demo.
+The QSVT curve F_H(pi_cl(t), QSVT(t)) is reported together with an equilibrium
+baseline. Positive skill over that baseline is the evidence of useful
+dynamical tracking; no assumption is made that the early-time curve is high.
 
 Readout
 -------
-The symmetrization H = D^{1/2} Q D^{-1/2} biases measured probabilities by
-pi_eq; the physical distribution is recovered by a_i = sqrt(p_i / pi_eq_i)
-then renormalizing (METHOD B). pi_eq is the model's stationary distribution
+The symmetrization H = D^{1/2} Q D^{-1/2} is inverted after measurement by
+multiplying amplitudes by sqrt(pi_eq), equivalently p_i -> p_i*pi_eq_i,
+then renormalizing. pi_eq is the model's stationary distribution
 (known a priori), while the time-evolved distribution is what we predict, so
 using pi_eq in the readout does NOT leak the answer for a non-equilibrium
 start -- the initial state and the trajectory are genuinely off-equilibrium.
@@ -41,7 +41,7 @@ start -- the initial state and the trajectory are genuinely off-equilibrium.
 Run from project root:
     python scripts/far_from_equilibrium.py
     python scripts/far_from_equilibrium.py --init uniform
-    python scripts/far_from_equilibrium.py --init perturbed --threshold 0.075
+    python scripts/far_from_equilibrium.py --init perturbed --threshold 0.20
 
 Outputs:
     results/far_from_equilibrium.json   (trajectory data + config)
@@ -71,7 +71,7 @@ from src.hamiltonian import (
 from src.block_encoding import build_simple_block_encoding
 from src.qsp_circuit import build_qsp_circuit, extract_codon_amps_complex
 from src.qsvt_angles_imagtime import compute_qsvt_angles_imagtime
-from src.qsvt_circuit_imagtime import combine_imagtime_amplitudes
+from src.qsvt_circuit_imagtime import combine_imagtime_amplitudes, assert_strictly_negative
 from src.trotter import classical_evolution
 from src.constants import (
     GY94_KAPPA, GY94_OMEGA, GY94_V, N_DATA_QUBITS, N_SENSE_CODONS,
@@ -79,7 +79,12 @@ from src.constants import (
 )
 
 EPSILON = 1e-3
-T_VALUES = [0.0, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0]
+from src.qsvt_angles_imagtime import T_MAX_RELIABLE
+
+# t=5.0 removed: reconstruction is not numerically reliable there (norm^2 = 278.6
+# against a true value of 2.15e-04). See qsvt_angles_imagtime.T_MAX_RELIABLE.
+T_VALUES = [0.0, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
+assert max(T_VALUES) <= T_MAX_RELIABLE, "t beyond validated reconstruction range"
 
 
 # ---------------------------------------------------------------------------
@@ -110,13 +115,42 @@ def total_variation(p, q):
     return 0.5 * float(np.sum(np.abs(p - q)))
 
 
-def reweight_probs(probs, pi_eq, n_codons=N_SENSE_CODONS):
-    rw = np.zeros(n_codons)
-    for i in range(n_codons):
-        if pi_eq[i] > 1e-15 and probs[i] > 0:
-            rw[i] = np.sqrt(probs[i] / pi_eq[i])
-    s = float(np.sum(rw))
-    return rw / s if s > 1e-12 else np.zeros(n_codons)
+def identity_baseline_fidelity(pi_cl, pi0):
+    """
+    The null model a referee will reach for: 'the circuit did nothing and
+    returned pi(0)'. If QSVT cannot beat this, high F_H proves nothing.
+
+    Reported alongside the equilibrium control, which answers a different and
+    weaker question ('is the state far from pi_eq?').
+    """
+    return hellinger_fidelity(pi_cl, pi0)
+
+
+def skill_score(f_model, f_baseline):
+    """
+    Fraction of the identity baseline's remaining error that the model closes.
+
+        S = (F_model - F_baseline) / (1 - F_baseline)
+
+    S > 0 : the circuit is doing real work.
+    S <= 0: returning the input unchanged is at least as good.
+    """
+    denom = 1.0 - f_baseline
+    if denom <= 1e-12:
+        return None
+    return float((f_model - f_baseline) / denom)
+
+
+from src.hamiltonian import reweight_to_distribution
+
+
+def reweight_probs(probs, pi_eq, n_codons=61):
+    """Thin wrapper kept for call-site compatibility.
+
+    Delegates to the single canonical implementation so the four copies of
+    this function cannot drift apart again.
+    """
+    return reweight_to_distribution(probs, pi_eq, n_codons)
 
 
 # ---------------------------------------------------------------------------
@@ -164,17 +198,28 @@ def make_initial_distribution(kind, pi_eq, sense_codons, n_codons=N_SENSE_CODONS
     return pi0, label
 
 
-def prepare_state_circuit(pi0, n_qubits=N_DATA_QUBITS):
+def prepare_state_circuit(pi0, pi_eq, n_qubits=N_DATA_QUBITS):
     """
-    Exact StatePreparation of |psi0> = sum_i sqrt(pi0_i) |i> on the data
-    register. For a far-from-equilibrium study we use exact preparation rather
-    than AAE: AAE infidelity (~0.012) would otherwise contaminate the very
-    signal we are trying to isolate. The pipeline only needs *a* circuit that
-    prepares the initial amplitudes on the data qubits, which this provides.
+    Exact preparation in the symmetrized basis. For
+    H = D^(1/2) Q D^(-1/2), a physical column distribution pi0 maps to
+    psi0 = D^(-1/2) pi0, so amplitudes are pi0_i/sqrt(pi_eq_i), normalized.
+    This reduces to sqrt(pi_eq) at equilibrium and remains unchanged for a
+    delta distribution after normalization.
     """
     n_states = 2 ** n_qubits
+    pi0 = np.asarray(pi0, dtype=float)
+    pi_eq = np.asarray(pi_eq, dtype=float)
+    if len(pi0) != len(pi_eq) or len(pi0) > n_states:
+        raise ValueError("pi0 and pi_eq must have the same supported dimension")
+    if np.any(pi0 < 0) or np.any(pi_eq < 0):
+        raise ValueError("pi0 and pi_eq must be non-negative")
+    if np.any((pi0 > 0) & (pi_eq <= 0)):
+        raise ValueError("pi0 has support outside the support of pi_eq")
     amps = np.zeros(n_states)
-    amps[:len(pi0)] = np.sqrt(np.clip(pi0, 0, None))
+    support = pi_eq > 0
+    symmetrized = np.zeros_like(pi0)
+    symmetrized[support] = pi0[support] / np.sqrt(pi_eq[support])
+    amps[:len(pi0)] = symmetrized
     nrm = np.linalg.norm(amps)
     if nrm > 0:
         amps /= nrm
@@ -212,7 +257,7 @@ def evaluate_qsvt_at_t(be_circuit, init_circuit, Q, pi0, pi_eq,
 
     raw_norm2 = float(np.sum(evolved ** 2))
     probs_norm = (evolved ** 2) / raw_norm2 if raw_norm2 > 1e-12 else np.zeros(n_codons)
-    probs_rw = reweight_probs(probs_norm, pi_eq, n_codons)
+    probs_rw = reweight_to_distribution(probs_norm, pi_eq, n_codons)
 
     pi_cl, _ = classical_evolution(Q, pi0, t)
     f_b = bhattacharyya_fidelity(pi_cl, probs_rw)
@@ -257,7 +302,7 @@ def main():
     # ---- Far-from-equilibrium initial distribution ----
     print("\n[2/4] Constructing far-from-equilibrium initial state...")
     pi0, init_label = make_initial_distribution(args.init, pi_eq, sense_codons)
-    init_circuit = prepare_state_circuit(pi0, n_qubits=N_DATA_QUBITS)
+    init_circuit = prepare_state_circuit(pi0, pi_eq, n_qubits=N_DATA_QUBITS)
     f0_eq = hellinger_fidelity(pi0, pi_eq)
     print(f"  init: {init_label}")
     print(f"  F_H(pi(0), pi_eq) = {f0_eq:.4f}  "
@@ -266,6 +311,7 @@ def main():
     # ---- Block-encoding ----
     print(f"\n[3/4] Block-encoding at threshold {args.threshold}...")
     pauli_op, n_kept = filter_pauli_op(pauli_full, args.threshold)
+    assert_strictly_negative(pauli_op)
     be_circuit, alpha_be, be_info = build_simple_block_encoding(
         pauli_op, n_data_qubits=N_DATA_QUBITS)
     n_be = be_info['n_ancilla']
@@ -273,33 +319,44 @@ def main():
 
     # ---- Trajectory sweep ----
     print("\n[4/4] Trajectory sweep (relaxation toward equilibrium)...")
-    print(f"\n  {'t':>5}  {'F_cl_eq':>8}  {'F_cl_pi0':>9}  "
-          f"{'F_H(QSVT)':>10}  {'F_B(QSVT)':>10}  {'TV(QSVT)':>9}  {'|QSVT|^2':>9}")
-    print(f"  {'-'*5}  {'-'*8}  {'-'*9}  {'-'*10}  {'-'*10}  {'-'*9}  {'-'*9}")
+    print(f"\n  {'t':>5}  {'F_cl_eq':>8}  {'F_ident':>8}  "
+          f"{'F_H(QSVT)':>10}  {'skill':>8}  {'TV':>8}  {'|QSVT|^2':>9}")
+    print(f"  {'-'*5}  {'-'*8}  {'-'*8}  {'-'*10}  {'-'*8}  {'-'*8}  {'-'*9}")
 
     rows = []
+    prev_norm2 = None
+    norm_monotone = True
     for t in T_VALUES:
         pi_cl, _ = classical_evolution(Q, pi0, t)
-        # Controls: how non-trivial is the classical trajectory at this t?
-        f_cl_eq = hellinger_fidelity(pi_cl, pi_eq)    # rises 0->1 as it relaxes
-        f_cl_pi0 = hellinger_fidelity(pi_cl, pi0)     # falls 1->? as it moves
+        f_cl_eq = hellinger_fidelity(pi_cl, pi_eq)
+        f_ident = identity_baseline_fidelity(pi_cl, pi0)
 
         t0 = time.time()
         try:
             f_b, f_h, tv, norm2, probs_rw, nphi = evaluate_qsvt_at_t(
                 be_circuit, init_circuit, Q, pi0, pi_eq, alpha_be, n_be, t)
         except Exception as e:
-            print(f"   QSVT @ t={t} failed: {e}")
-            f_b = f_h = tv = norm2 = float('nan'); probs_rw = None; nphi = 0
+            raise RuntimeError(f"QSVT evaluation failed at t={t}") from e
         dt = time.time() - t0
 
-        print(f"  {t:>5.2f}  {f_cl_eq:>8.4f}  {f_cl_pi0:>9.4f}  "
-              f"{f_h:>10.4f}  {f_b:>10.4f}  {tv:>9.4f}  {norm2:>9.4f}")
+        s = skill_score(f_h, f_ident)
+        if t > 0 and prev_norm2 is not None and not np.isnan(norm2):
+            if norm2 > prev_norm2 + 1e-9:
+                norm_monotone = False
+        if not np.isnan(norm2):
+            prev_norm2 = norm2
+
+        flag = "" if (s is None or s > 0) else "  <-- identity wins"
+        skill_text = "     n/a" if s is None else f"{s:>8.4f}"
+        print(f"  {t:>5.2f}  {f_cl_eq:>8.4f}  {f_ident:>8.4f}  "
+              f"{f_h:>10.4f}  {skill_text}  {tv:>8.4f}  {norm2:>9.4f}{flag}")
 
         rows.append({
             't': float(t),
             'f_classical_vs_eq': f_cl_eq,
-            'f_classical_vs_pi0': f_cl_pi0,
+            'f_classical_vs_pi0': f_ident,
+            'f_identity_baseline': f_ident,
+            'skill_vs_identity': s,
             'f_hellinger_qsvt': f_h,
             'f_bhattacharyya_qsvt': f_b,
             'tv_qsvt': tv,
@@ -311,14 +368,26 @@ def main():
     # ---- Interpretation summary ----
     early = [r for r in rows if 0.0 < r['t'] <= 0.5]
     if early:
-        mean_far_fid = float(np.nanmean([r['f_hellinger_qsvt'] for r in early]))
+        mean_q = float(np.nanmean([r['f_hellinger_qsvt'] for r in early]))
+        mean_id = float(np.nanmean([r['f_identity_baseline'] for r in early]))
         mean_ctrl = float(np.nanmean([r['f_classical_vs_eq'] for r in early]))
-        print("\n  Interpretation (early, far-from-equilibrium window t in (0, 0.5]):")
-        print(f"    mean F_H(QSVT vs CTMC)   = {mean_far_fid:.4f}")
-        print(f"    mean F_H(CTMC vs pi_eq)  = {mean_ctrl:.4f}  "
-              f"(low => state is genuinely off-equilibrium here)")
-        print("    A high QSVT fidelity while the control is low is the evidence")
-        print("    that the circuit tracks DYNAMICS, not equilibrium reconstruction.")
+        print("\n  Interpretation (early window t in (0, 0.5]):")
+        print(f"    mean F_H(QSVT vs CTMC)      = {mean_q:.4f}")
+        print(f"    mean F_H(identity vs CTMC)  = {mean_id:.4f}   <-- do-nothing baseline")
+        print(f"    mean F_H(CTMC vs pi_eq)     = {mean_ctrl:.4f}   <-- equilibrium control")
+        if mean_q > mean_id:
+            print("    QSVT beats the identity baseline: the circuit is doing real work.")
+        else:
+            print("    *** QSVT does NOT beat the identity baseline in this window. ***")
+            print("    High fidelity here is not evidence of simulated dynamics: at")
+            print("    small t the classical state has barely moved from pi(0), so")
+            print("    returning the input unchanged already scores well. Report a")
+            print("    window where the skill score is positive, or report the skill")
+            print("    score itself rather than raw F_H.")
+        print(f"\n    evolved-state norm^2 monotonically decreasing: {norm_monotone}")
+        if not norm_monotone:
+            print("    *** Norm is NOT monotone -- check that H_tau is still")
+            print("    negative-semidefinite at this threshold (constants.assert_dissipative).")
 
     # ---- Save ----
     results_dir = os.path.join(_PROJECT_DIR, 'results')
@@ -340,10 +409,11 @@ def main():
                 'be_ancilla': int(n_be),
                 'f0_init_vs_eq': f0_eq,
                 'zero_eigenvalues': int(h_info['n_zero_eigenvalues']),
-                'readout': 'sqrt(p/pi_eq) reweight (METHOD B); exact StatePreparation init',
+                'readout': 'sqrt(p * pi_eq) reweight (exact inverse of the D^{-1/2} '
+                           'symmetrization); exact StatePreparation init',
             },
             'rows': rows,
-        }, f, indent=2, default=str)
+        }, f, indent=2, default=str, allow_nan=False)
     print(f"\n  Results saved -> {out_path}")
 
 

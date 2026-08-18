@@ -39,7 +39,7 @@ _PROJECT_DIR = os.path.dirname(_SCRIPT_DIR)
 # (key, human description, script filename, optional extra args)
 # Keys let you --only / --skip individual stages or whole groups.
 STAGES = [
-    ("aae",     "AAE training / cache (best_aae_params_gapdh.json)",
+    ("aae",     "AAE training / cache (best_aae_params_gapdh_probability.json)",
         "aae_results_gapdh.py", []),
     ("pauli",   "Pauli truncation norms sweep",
         "pauli_truncation_norms.py", []),
@@ -47,7 +47,7 @@ STAGES = [
         "tsweep_qsvt_vs_qsp_hellinger.py", []),
     ("ffe",     "Far-from-equilibrium trajectory (delta-start dynamics)",
         "far_from_equilibrium.py", []),
-    ("table9",  "Four-threshold QSVT fidelity sweep (Table 9)",
+    ("table9",  "QSVT truncation-threshold validity audit",
         "threshold_sweep.py", []),
     ("plots",   "Plot Hellinger + norm-decay figures from JSON",
         "plot_hellinger_and_norm.py", []),

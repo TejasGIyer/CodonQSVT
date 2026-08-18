@@ -11,10 +11,10 @@ Figures produced (matching paper numbering):
     fig5_hellinger_fidelity_vs_t.pdf/png    — QSP vs QSVT fidelity (Figure 5)
     fig6_norm_decay.pdf/png                 — Evolved-state norm (Figure 6)
     fig7_chebyshev_channels.pdf/png         — cosh/sinh polynomial approx (Figure 7)
-    fig9_truncation_sweep.pdf/png           — CRITICAL: monotone-saturating fidelity (Figure 9)
+    fig9_truncation_sweep.pdf/png           — Truncation validity audit (Figure 9)
     fig_ffe_trajectory.pdf/png              — NEW: far-from-equilibrium (new figure)
     fig10_logical_vs_transpiled.pdf/png     — Circuit depth comparison (Figure 10)
-    fig11_fidelity_ladder.pdf/png           — Ideal to noisy fidelity (Figure 11)
+    fig11_fidelity_ladder.pdf/png           — Validated statevector fidelities (Figure 11)
 """
 
 import os
@@ -175,10 +175,15 @@ def fig6_norm_decay():
 # =====================================================================
 def fig7_chebyshev_channels():
     print("\n  [Fig 7] Chebyshev polynomial approximation channels...")
-    # Use corrected parameters at tau=0.20
-    alpha = 2.640
-    t_evol = 0.5
-    tau_r = alpha * t_evol  # 1.320
+    data = load_json('threshold_sweep.json')
+    if data is None or not data.get('rows'):
+        return
+    row = data['rows'][0]
+    alpha = row['alpha']
+    t_evol = data['config']['t']
+    tau_r = row['tau_r']
+    cosh_degree = row['cosh_degree']
+    sinh_degree = row['sinh_degree']
     norm_factor = 2.0 * np.cosh(tau_r)
 
     # Analytic target functions
@@ -207,8 +212,8 @@ def fig7_chebyshev_channels():
     f_cosh_rescaled = lambda xx: np.cosh(tau_r * xx) / norm_factor
     f_sinh_rescaled = lambda xx: np.sinh(tau_r * xx) / norm_factor
 
-    coefs_cosh = fit_cheb(f_cosh_rescaled, 12, 'even')
-    coefs_sinh = fit_cheb(f_sinh_rescaled, 13, 'odd')
+    coefs_cosh = fit_cheb(f_cosh_rescaled, cosh_degree, 'even')
+    coefs_sinh = fit_cheb(f_sinh_rescaled, sinh_degree, 'odd')
 
     p_cosh = cheb.chebval(x, coefs_cosh)
     p_sinh = cheb.chebval(x, coefs_sinh)
@@ -226,7 +231,7 @@ def fig7_chebyshev_channels():
     ax.plot(x, f_cosh_target, '-', color=C_QSVT, linewidth=1.8,
             label=r'$\cosh(\tau_r x) / 2\cosh\tau_r$')
     ax.plot(x, p_cosh, '--', color=C_QSP, linewidth=1.5,
-            label='Chebyshev (deg 12)')
+            label=f'Chebyshev (deg {cosh_degree})')
     ax.set_title(r'(a) $\mathbf{cosh}$ channel (even)', fontsize=12, loc='left')
     ax.set_xlabel(r'$x = \lambda/\alpha$')
     ax.set_ylabel('Amplitude')
@@ -237,7 +242,7 @@ def fig7_chebyshev_channels():
     ax.plot(x, f_sinh_target, '-', color=C_QSVT, linewidth=1.8,
             label=r'$\sinh(\tau_r x) / 2\cosh\tau_r$')
     ax.plot(x, p_sinh, '--', color=C_QSP, linewidth=1.5,
-            label='Chebyshev (deg 13)')
+            label=f'Chebyshev (deg {sinh_degree})')
     ax.set_title(r'(b) $\mathbf{sinh}$ channel (odd)', fontsize=12, loc='left')
     ax.set_xlabel(r'$x = \lambda/\alpha$')
     ax.set_ylabel('Amplitude')
@@ -278,13 +283,17 @@ def fig7_chebyshev_channels():
 
 
 # =====================================================================
-# FIGURE 9 — Truncation sweep (MOST CRITICAL: monotone-saturating)
+# FIGURE 9 — Truncation-threshold validity audit
 # =====================================================================
 def fig9_truncation_sweep():
-    print("\n  [Fig 9] Truncation fidelity sweep (CRITICAL)...")
+    print("\n  [Fig 9] Truncation-threshold validity audit...")
     data = load_json('threshold_sweep.json')
     if data is None: return
     rows = data['rows']
+    skipped = data.get('skipped_thresholds', [])
+    if not rows:
+        print("    no valid imaginary-time thresholds to plot")
+        return
 
     taus    = [r['threshold']       for r in rows]
     fh      = [r['f_hellinger_rw']  for r in rows]
@@ -294,26 +303,29 @@ def fig9_truncation_sweep():
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     # ── Left panel: Fidelity vs threshold ──
-    ax1.plot(taus, fh, 'o-', color=C_QSVT, markersize=9, linewidth=2.0, zorder=5)
+    plot_style = 'o-' if len(rows) > 1 else 'o'
+    ax1.plot(taus, fh, plot_style, color=C_QSVT, markersize=9,
+             linewidth=2.0, zorder=5)
 
     # Annotate each point
     offsets = [(0.008, 0.006), (-0.012, 0.006), (0.005, -0.012), (-0.008, 0.006)]
     for i, (tau, f) in enumerate(zip(taus, fh)):
-        dx, dy = offsets[i]
+        dx, dy = offsets[i % len(offsets)]
         ax1.annotate(f'{f:.3f}', xy=(tau, f), xytext=(tau + dx, f + dy),
                      fontsize=10, fontweight='bold', color=C_QSVT, ha='center')
 
-    # Highlight the saturation region
-    ax1.axhspan(fh[2] - 0.002, fh[3] + 0.002, alpha=0.08, color=C_QSVT)
-    ax1.annotate('Saturation\n(resource-efficiency\nknee)',
-                 xy=(0.075, fh[2]), xytext=(0.14, 0.915),
-                 fontsize=9, color=C_QSVT, ha='center',
-                 arrowprops=dict(arrowstyle='->', color=C_QSVT, lw=0.8))
+    if skipped:
+        rejected = ', '.join(f"{r['threshold']:.3f}" for r in skipped)
+        ax1.text(0.03, 0.05, f'Rejected (spectrum crosses zero): {rejected}',
+                 transform=ax1.transAxes, fontsize=9, va='bottom',
+                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
 
     ax1.set_xlabel(r'Pauli truncation threshold $\tau$')
     ax1.set_ylabel(r'Hellinger fidelity $F_H$ (reweighted)')
-    ax1.set_xlim(0.22, 0.03)  # reversed x-axis (more terms to the right)
-    ax1.set_ylim(0.885, 0.935)
+    all_taus = taus + [r['threshold'] for r in skipped]
+    ax1.set_xlim(max(all_taus) + 0.02, min(all_taus) - 0.02)
+    margin = max(0.01, 0.1 * (max(fh) - min(fh)))
+    ax1.set_ylim(max(0, min(fh) - margin), min(1.01, max(fh) + margin))
     ax1.set_xticks(taus)
     ax1.set_xticklabels([f'{t:.3f}' if t == 0.075 else f'{t:.2f}' for t in taus])
 
@@ -326,7 +338,7 @@ def fig9_truncation_sweep():
     ax2.set_xlabel(r'Pauli truncation threshold $\tau$')
     ax2.set_ylabel(r'1-norm $\alpha$', color=color_a)
     ax2.tick_params(axis='y', labelcolor=color_a)
-    ax2.set_xlim(0.22, 0.03)
+    ax2.set_xlim(max(all_taus) + 0.02, min(all_taus) - 0.02)
     ax2.set_xticks(taus)
     ax2.set_xticklabels([f'{t:.3f}' if t == 0.075 else f'{t:.2f}' for t in taus])
 
@@ -342,7 +354,7 @@ def fig9_truncation_sweep():
     lines2, labels2 = ax2b.get_legend_handles_labels()
     ax2.legend(lines1 + lines2, labels1 + labels2, loc='center left', framealpha=0.95)
 
-    fig.suptitle(r'Monotone-saturating fidelity under Pauli truncation '
+    fig.suptitle(r'Imaginary-time QSVT truncation-threshold validity '
                  r'($t = 0.5$, corrected pipeline)',
                  fontsize=13, fontweight='bold')
     fig.tight_layout()
@@ -411,13 +423,18 @@ def fig_ffe_trajectory():
 # =====================================================================
 def fig10_circuit_metrics():
     print("\n  [Fig 10] Logical vs transpiled circuit metrics...")
-    # Corrected logical depths from threshold_sweep.json at tau=0.20
+    data = load_json('threshold_sweep.json')
+    if data is None or not data.get('rows'):
+        return
+    row = data['rows'][0]
+    # Logical depths come from the regenerated threshold result. Transpiled
+    # values remain explicitly labelled estimates.
     # Transpiled: use known ~3.6x inflation factor from the paper
     # (actual retranspilation on K=7 circuits needed for exact numbers,
     #  but the ratio is structural)
 
-    logical_cosh_depth  = 4422
-    logical_sinh_depth  = 4788
+    logical_cosh_depth = row['cosh_circuit_depth']
+    logical_sinh_depth = row['sinh_circuit_depth']
     # The paper's old transpiled ratio was 2717/743 = 3.66x for cosh
     # Apply same ratio to new logical depths for estimate
     transpile_ratio = 3.66
@@ -485,30 +502,14 @@ def fig10_circuit_metrics():
 # FIGURE 11 — Fidelity ladder (ideal SV → noisy)
 # =====================================================================
 def fig11_fidelity_ladder():
-    print("\n  [Fig 11] Fidelity ladder...")
-    # Corrected values from threshold_sweep.json at tau=0.20
-    # Noisy: apply same delta_F ~ 0.27 from the paper
-    ideal_raw_fh = 0.805
-    ideal_raw_fb = 0.648
-    ideal_rw_fh  = 0.895
-    ideal_rw_fb  = 0.801
-
-    # Noisy amplitude-recovered: delta_F ~ 0.145 from ideal rw
-    noisy_amp_fh = ideal_rw_fh - 0.145
-    noisy_amp_fb = ideal_rw_fb - 0.24
-
-    # Simple averaging (non-physical): high, ~0.96
-    noisy_avg_fh = 0.96
-    noisy_avg_fb = 0.92
-
-    categories = [
-        'Ideal SV (raw)',
-        'Ideal SV (reweighted)',
-        'Noisy (simple avg)*',
-        'Noisy (amp-recovered, rw)'
-    ]
-    fb_vals = [ideal_raw_fb, ideal_rw_fb, noisy_avg_fb, noisy_amp_fb]
-    fh_vals = [ideal_raw_fh, ideal_rw_fh, noisy_avg_fh, noisy_amp_fh]
+    print("\n  [Fig 11] Validated statevector fidelities...")
+    data = load_json('threshold_sweep.json')
+    if data is None or not data.get('rows'):
+        return
+    row = data['rows'][0]
+    categories = ['Ideal SV (raw)', 'Ideal SV (inverse-symmetrized)']
+    fb_vals = [row['f_bhattacharyya_raw'], row['f_bhattacharyya_rw']]
+    fh_vals = [row['f_hellinger_raw'], row['f_hellinger_rw']]
 
     fig, ax = plt.subplots(figsize=(9, 5))
 
@@ -530,14 +531,11 @@ def fig11_fidelity_ladder():
     ax.set_yticklabels(categories)
     ax.set_xlabel('Fidelity')
     ax.set_xlim(0, 1.1)
-    ax.legend(loc='lower right', framealpha=0.95)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08),
+              ncol=2, framealpha=0.95)
     ax.invert_yaxis()
 
-    # Footnote
-    ax.text(0.5, -0.12, '*Simple averaging is a non-physical readout strategy; see text for caveats.',
-            transform=ax.transAxes, fontsize=8, color='#888888', ha='center', style='italic')
-
-    fig.suptitle('Fidelity ladder: ideal SV to noisy FakeQuebec (threshold 0.20)',
+    fig.suptitle('Validated statevector fidelity (threshold 0.20)',
                  fontsize=12, fontweight='bold')
     fig.tight_layout()
     save_fig(fig, 'fig11_fidelity_ladder')

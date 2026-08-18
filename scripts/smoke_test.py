@@ -102,13 +102,12 @@ def quick_pipeline():
     # GAPDH 4 species has 58 unique codons, not all 61 sense codons
     assert len(codon_freqs) >= 50, f"Expected ~58 codons, got {len(codon_freqs)}"
 
-    best_v, min_err = 50.0, float('inf')
-    for test_v in np.linspace(5, 200, 40):
-        err = abs(calculate_implied_omega(codon_freqs, 1.8425, test_v) - 0.0599)
-        if err < min_err:
-            min_err, best_v = err, test_v
+    from src.constants import GY94_KAPPA, GY94_V
+    # Use the frozen calibrated V. The old 40-point grid here returned V=15.0
+    # while the main pipeline used 13.5 -- two different Hamiltonians.
+    Q, sense_codons, pi, _ = build_gy94_rate_matrix(
+        codon_freqs, kappa=GY94_KAPPA, V=GY94_V)
 
-    Q, sense_codons, pi, _ = build_gy94_rate_matrix(codon_freqs, kappa=1.8425, V=best_v)
     assert Q.shape == (61, 61), f"Q shape {Q.shape}"
 
     H, _ = symmetrize_to_hamiltonian(Q, pi, n_qubits=6)

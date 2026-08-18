@@ -6,7 +6,8 @@ Sweeps evolution time t and compares:
   - QSP v1:    cos+sin channels -> e^{-iHt}    -- UNITARY, oscillatory
   - QSVT:      cosh+sinh channels -> e^{Ht}    -- DISSIPATIVE, monotonic
 
-Also sweeps Pauli threshold to find the best accuracy-vs-depth tradeoff.
+The threshold section rejects generators whose spectrum crosses zero; the
+global sinh-channel sign correction is not valid for those operators.
 
 Usage:
     cd "C:\\Users\\HPUSER\\Desktop\\Genetic Mutation"
@@ -27,29 +28,33 @@ if _PROJECT_DIR not in sys.path:
 from qiskit.quantum_info import Statevector
 
 from data.gapdh_sequences import build_gapdh_register, pooled_codon_frequencies, ALL_SEQUENCES
-from src.aae_encoding import aae_encode, get_aae_circuit
-from src.gy94_model import build_gy94_rate_matrix, calculate_implied_omega
-from src.hamiltonian import symmetrize_to_hamiltonian, decompose_to_pauli, filter_pauli_op
+from src.aae_encoding import get_aae_circuit
+from src.gy94_model import build_gy94_rate_matrix
+from src.hamiltonian import (symmetrize_to_hamiltonian, decompose_to_pauli,
+                             filter_pauli_op, reweight_to_distribution)
 from src.block_encoding import build_simple_block_encoding
 from src.qsp_circuit import (
     build_qsp_circuit, extract_codon_amps_complex, compute_full_unitary_angles,
 )
 from src.qsvt_angles_imagtime import compute_qsvt_angles_imagtime
-from src.qsvt_circuit_imagtime import combine_imagtime_amplitudes
+from src.qsvt_circuit_imagtime import (combine_imagtime_amplitudes,
+                                       assert_strictly_negative)
 from src.trotter import classical_evolution
+from src.constants import (GY94_KAPPA, GY94_OMEGA, GY94_V,
+                           PAULI_THRESHOLDS, PAULI_THRESHOLD_PRIMARY)
 
 
 # =====================================================================
 # CONFIG
 # =====================================================================
-KAPPA = 1.8425
-OMEGA = 0.0599
-THRESHOLD = 0.1
+KAPPA = GY94_KAPPA
+OMEGA = GY94_OMEGA
+THRESHOLD = PAULI_THRESHOLD_PRIMARY
 EPSILON = 1e-3
 N_QUBITS = 6
 
 T_VALUES = [0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0]
-THRESHOLD_VALUES = [0.5, 0.2, 0.1, 0.05]
+THRESHOLD_VALUES = list(PAULI_THRESHOLDS)
 
 
 def dist_fidelity(p, q):
@@ -81,7 +86,9 @@ def evaluate_qsp_at_t(be_circuit, aae_circuit, Q, pi, sense_codons,
     combined = amps_cos.real ** 2 + amps_sin.real ** 2
     psum = float(np.sum(combined))
     probs = combined / psum if psum > 1e-12 else np.zeros(n_codons)
-    raw_norm2 = float(np.sum(np.abs(amps_cos) ** 2) + np.sum(np.abs(amps_sin) ** 2))
+    # pyqsp returns cos/sin channels rescaled by 1/2, so their real-part
+    # probabilities must be multiplied by four to recover the physical norm.
+    raw_norm2 = 4.0 * psum
 
     pi_cl, _ = classical_evolution(Q, pi, t)
     f = dist_fidelity(pi_cl, probs)
@@ -112,7 +119,8 @@ def evaluate_qsvt_at_t(be_circuit, aae_circuit, Q, pi, sense_codons,
         ang_info['norm_factor_cosh'], ang_info['norm_factor_sinh'])
     probs_raw = evolved ** 2
     raw_sum = float(np.sum(probs_raw))
-    probs = probs_raw / raw_sum if raw_sum > 1e-12 else np.zeros(n_codons)
+    probs_sym = probs_raw / raw_sum if raw_sum > 1e-12 else np.zeros(n_codons)
+    probs = reweight_to_distribution(probs_sym, pi / pi.sum(), n_codons)
 
     pi_cl, _ = classical_evolution(Q, pi, t)
     f = dist_fidelity(pi_cl, probs)
@@ -130,12 +138,8 @@ def main():
     # --- Shared setup ---
     print("\n  Building Q + H + Pauli...")
     codon_freqs = pooled_codon_frequencies()
-    best_v, min_err = 50.0, float('inf')
-    for test_v in np.linspace(5, 200, 391):
-        err = abs(calculate_implied_omega(codon_freqs, KAPPA, test_v) - OMEGA)
-        if err < min_err:
-            min_err, best_v = err, test_v
-    print(f"  V = {best_v:.4f} (omega err = {min_err:.6f})")
+    best_v = GY94_V
+    print(f"  V = {best_v:.4f} (frozen root-calibrated value)")
 
     Q, sense_codons, pi, _ = build_gy94_rate_matrix(codon_freqs, kappa=KAPPA, V=best_v)
     H, _ = symmetrize_to_hamiltonian(Q, pi, n_qubits=N_QUBITS)
@@ -143,7 +147,7 @@ def main():
 
     print("\n  Loading (or training) AAE (once)...")
     s1 = build_gapdh_register(n_qubits=N_QUBITS)
-    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh.json')
+    aae_json = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh_probability.json')
     s2 = get_aae_circuit(s1, aae_json, n_layers=6, n_trials=3, maxiter=3000)
     aae_circuit = s2['circuit']
     print(f"  AAE overlap: {s2['overlap']:.6f}")
@@ -162,22 +166,20 @@ def main():
 
     for th in THRESHOLD_VALUES:
         pauli_op, n_kept = filter_pauli_op(pauli_full, th)
+        try:
+            assert_strictly_negative(pauli_op)
+        except ValueError as exc:
+            print(f"  {th:>10.3f}  REJECTED: {exc}")
+            continue
         alpha = float(np.sum(np.abs(pauli_op.coeffs)))
         be_circuit, alpha_be, be_info = build_simple_block_encoding(
             pauli_op, n_data_qubits=N_QUBITS)
         n_be = be_info['n_ancilla']
 
-        try:
-            f_qsp, _, _ = evaluate_qsp_at_t(
-                be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, 0.5)
-        except Exception:
-            f_qsp = float('nan')
-
-        try:
-            f_qsvt, norm2, _ = evaluate_qsvt_at_t(
-                be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, 0.5)
-        except Exception:
-            f_qsvt, norm2 = float('nan'), float('nan')
+        f_qsp, _, _ = evaluate_qsp_at_t(
+            be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, 0.5)
+        f_qsvt, norm2, _ = evaluate_qsvt_at_t(
+            be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, 0.5)
 
         print(f"  {th:>10.2f}  {n_kept:>6d}  {alpha_be:>8.4f}  {n_be:>8d}  "
               f"{f_qsp:>8.4f}  {f_qsvt:>9.4f}  {norm2:>12.4f}")
@@ -190,6 +192,7 @@ def main():
     print("=" * 70)
 
     pauli_op, n_kept = filter_pauli_op(pauli_full, THRESHOLD)
+    assert_strictly_negative(pauli_op)
     alpha = float(np.sum(np.abs(pauli_op.coeffs)))
     be_circuit, alpha_be, be_info = build_simple_block_encoding(
         pauli_op, n_data_qubits=N_QUBITS)
@@ -206,19 +209,13 @@ def main():
         f_cl_eq = dist_fidelity(pi_cl, pi_eq)
 
         t0 = time.time()
-        try:
-            f_qsp, qsp_norm2, qsp_phases = evaluate_qsp_at_t(
-                be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, t)
-        except Exception as e:
-            f_qsp, qsp_norm2, qsp_phases = float('nan'), float('nan'), 0
+        f_qsp, qsp_norm2, qsp_phases = evaluate_qsp_at_t(
+            be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, t)
         qsp_time = time.time() - t0
 
         t0 = time.time()
-        try:
-            f_qsvt, qsvt_norm2, qsvt_phases = evaluate_qsvt_at_t(
-                be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, t)
-        except Exception as e:
-            f_qsvt, qsvt_norm2, qsvt_phases = float('nan'), float('nan'), 0
+        f_qsvt, qsvt_norm2, qsvt_phases = evaluate_qsvt_at_t(
+            be_circuit, aae_circuit, Q, pi, sense_codons, alpha_be, n_be, t)
         qsvt_time = time.time() - t0
 
         # Find QSVT top codon for quick sanity check
@@ -233,9 +230,11 @@ def main():
             ac = extract_codon_amps_complex(sv_c, ic['n_total_qubits'], n_be, N_QUBITS, 61)
             as_ = extract_codon_amps_complex(sv_s, ic['n_total_qubits'], n_be, N_QUBITS, 61)
             ev = combine_imagtime_amplitudes(ac, as_, ang['norm_factor_cosh'], ang['norm_factor_sinh'])
-            qsvt_top = sense_codons[int(np.argmax(ev ** 2))]
-        except Exception:
-            pass
+            p_sym = ev ** 2 / np.sum(ev ** 2)
+            p_rw = reweight_to_distribution(p_sym, pi_eq, 61)
+            qsvt_top = sense_codons[int(np.argmax(p_rw))]
+        except Exception as exc:
+            raise RuntimeError(f"QSVT top-codon diagnostic failed at t={t}") from exc
 
         print(f"  {t:>6.2f}  {f_cl_eq:>9.4f}  {f_qsp:>8.4f}  {f_qsvt:>9.4f}  "
               f"{qsp_norm2:>11.4f}  {qsvt_norm2:>12.4f}  {qsvt_top:>10}")
@@ -268,7 +267,7 @@ def main():
                 'alpha': float(alpha_be), 'aae_overlap': float(s2['overlap']),
             },
             'rows': rows,
-        }, f, indent=2, default=str)
+        }, f, indent=2, default=str, allow_nan=False)
     print(f"\n  Results saved: {out_path}")
 
     # ================================================================

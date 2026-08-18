@@ -301,7 +301,7 @@ def main():
 
     # Also save the best params from L-BFGS for use in the main pipeline
     lbfgs_result = all_results[0]
-    params_path = os.path.join(RESULTS_DIR, 'best_aae_params_gapdh.json')
+    params_path = os.path.join(RESULTS_DIR, 'best_aae_params_gapdh_probability.json')
     with open(params_path, 'w') as f:
         json.dump({
             'params': lbfgs_result['best_params'],

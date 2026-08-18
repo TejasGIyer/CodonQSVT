@@ -20,15 +20,21 @@ Fidelity definitions (match src/qsvt_imagtime_noisy.py exactly):
 
     hellinger_fidelity(p, q)     = 1 - (1/2) sum ( sqrt(p_i) - sqrt(q_i) )^2
 
-    reweight(p, pi_eq)_i = sqrt(p_i / pi_eq_i)       (then normalize)
+    reweight(p, pi_eq)_i = sqrt(p_i * pi_eq_i)       (then normalize)
 
 QSVT distribution = reweight(evolved^2 / sum(evolved^2), pi_eq).
-This is METHOD B in the standalone tests — the one that hits ~0.9 Hellinger.
+This is the exact inverse of the detailed-balance symmetrization.
 
 Place this file in:  C:\\Users\\Ganesh\\gene_mutation_main\\scripts\\
 Run from project root:
     python scripts/tsweep_qsvt_vs_qsp_hellinger.py
 """
+#   NOTE ON INTERPRETATION: this sweep starts from pi_eq, so the classical
+#   reference is stationary and F_cl(eq) = 1.0000 at every t. It is therefore a
+#   STATIONARITY / CONSISTENCY check on the pipeline, not a demonstration of
+#   dynamics. The dynamics claim rests entirely on far_from_equilibrium.py,
+#   which starts from a delta and has a non-trivial classical trajectory.
+
 
 import os
 import sys
@@ -54,19 +60,24 @@ from src.qsp_circuit import (
     build_qsp_circuit, extract_codon_amps_complex, compute_full_unitary_angles,
 )
 from src.qsvt_angles_imagtime import compute_qsvt_angles_imagtime
-from src.qsvt_circuit_imagtime import combine_imagtime_amplitudes
+from src.qsvt_circuit_imagtime import combine_imagtime_amplitudes, assert_strictly_negative
 from src.trotter import classical_evolution
 
 
 # =====================================================================
 # CONFIG — chosen to match the target plot titles
 # =====================================================================
-KAPPA       = 1.8425
-OMEGA       = 0.0599
-THRESHOLD   = 0.20         # matches plot title "threshold 0.20"
+from src.constants import (
+    GY94_KAPPA, GY94_OMEGA, GY94_V, N_DATA_QUBITS,
+    PAULI_THRESHOLD_PRIMARY, AAE_N_LAYERS,
+)
+
+KAPPA       = GY94_KAPPA
+OMEGA       = GY94_OMEGA
+THRESHOLD   = PAULI_THRESHOLD_PRIMARY
 EPSILON     = 1e-3
-N_QUBITS    = 6
-N_LAYERS    = 8            # matches plot title "8-layer AAE" (cache has 8)
+N_QUBITS    = N_DATA_QUBITS
+N_LAYERS    = AAE_N_LAYERS
 
 T_VALUES = [0.0, 0.05, 0.1, 0.15, 0.25, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0]
 
@@ -93,17 +104,16 @@ def hellinger_fidelity(p, q):
     return float(np.clip(1.0 - h2, 0.0, 1.0))
 
 
+from src.hamiltonian import reweight_to_distribution
+
+
 def reweight_probs(probs, pi_eq, n_codons=61):
+    """Thin wrapper kept for call-site compatibility.
+
+    Delegates to the single canonical implementation so the four copies of
+    this function cannot drift apart again.
     """
-    Apply sqrt(p / pi_eq) reweighting and renormalize to a distribution.
-    Identical to src/qsvt_imagtime_noisy.py::reweight_probs.
-    """
-    rw = np.zeros(n_codons)
-    for i in range(n_codons):
-        if pi_eq[i] > 1e-15 and probs[i] > 0:
-            rw[i] = np.sqrt(probs[i] / pi_eq[i])
-    s = float(np.sum(rw))
-    return rw / s if s > 1e-12 else np.zeros(n_codons)
+    return reweight_to_distribution(probs, pi_eq, n_codons)
 
 
 # =====================================================================
@@ -120,10 +130,12 @@ def reweight_probs(probs, pi_eq, n_codons=61):
 def evaluate_qsp_at_t(be_circuit, aae_circuit, Q, pi, pi_eq,
                       alpha, n_be, t, n_codons=61):
     if t == 0.0:
+        initial = np.abs(np.asarray(Statevector.from_instruction(aae_circuit).data[:n_codons])) ** 2
+        raw_norm2 = float(initial.sum())
+        probs = initial / raw_norm2 if raw_norm2 > 1e-12 else np.zeros(n_codons)
         pi0 = pi / pi.sum()
-        f_b = bhattacharyya_fidelity(pi0, pi0)
-        f_h = hellinger_fidelity(pi0, pi0)
-        return f_b, f_h, 1.0, 0
+        return (bhattacharyya_fidelity(pi0, probs),
+                hellinger_fidelity(pi0, probs), raw_norm2, 0)
 
     phis_cos, phis_sin, _ = compute_full_unitary_angles(alpha, t, epsilon=EPSILON)
     qc_cos, info_cos = build_qsp_circuit(
@@ -164,18 +176,20 @@ def evaluate_qsp_at_t(be_circuit, aae_circuit, Q, pi, pi_eq,
 #   evolved   = (Re cosh)*N_cosh + (Re sinh)*N_sinh
 #   raw_norm2 = sum(evolved^2)           — Plot 2 quantity (decays)
 #   probs_norm = evolved^2 / raw_norm2   — METHOD A (raw renorm)
-#   probs_rw   = sqrt(probs_norm / pi_eq), then normalize  — METHOD B
+#   probs_rw   = sqrt(probs_norm * pi_eq), then normalize  — inverse map
 #
-# METHOD B (~0.9 Hellinger) is what Plot 1 shows as the blue "stable,
-# reweighted" curve.
+# The reweighted distribution is what Plot 1 shows as the blue curve.
 # =====================================================================
 def evaluate_qsvt_at_t(be_circuit, aae_circuit, Q, pi, pi_eq,
                        alpha, n_be, t, n_codons=61):
     if t == 0.0:
+        initial = np.abs(np.asarray(Statevector.from_instruction(aae_circuit).data[:n_codons])) ** 2
+        raw_norm2 = float(initial.sum())
+        probs = initial / raw_norm2 if raw_norm2 > 1e-12 else np.zeros(n_codons)
+        probs_rw = reweight_probs(probs, pi_eq, n_codons)
         pi0 = pi / pi.sum()
-        f_b = bhattacharyya_fidelity(pi0, pi0)
-        f_h = hellinger_fidelity(pi0, pi0)
-        return f_b, f_h, 1.0, 0
+        return (bhattacharyya_fidelity(pi0, probs_rw),
+                hellinger_fidelity(pi0, probs_rw), raw_norm2, 0)
 
     phases_cosh, phases_sinh, ang_info = compute_qsvt_angles_imagtime(
         alpha, t, epsilon=EPSILON)
@@ -201,7 +215,7 @@ def evaluate_qsvt_at_t(be_circuit, aae_circuit, Q, pi, pi_eq,
     probs_raw = evolved ** 2
     probs_norm = probs_raw / raw_norm2 if raw_norm2 > 1e-12 else np.zeros(n_codons)
 
-    # Stage 2: sqrt(p / pi_eq) reweighting — METHOD B
+    # Stage 2: sqrt(p * pi_eq), the inverse symmetrization map
     probs_rw = reweight_probs(probs_norm, pi_eq, n_codons)
 
     pi_cl, _ = classical_evolution(Q, pi, t)
@@ -222,15 +236,10 @@ def main():
     # ---------- Build CTMC + Hamiltonian ----------
     print("\n[1/4] Building Q, H, Pauli decomposition...")
     codon_freqs = pooled_codon_frequencies()
-    best_v, min_err = 50.0, float('inf')
-    for test_v in np.linspace(5, 200, 391):
-        err = abs(calculate_implied_omega(codon_freqs, KAPPA, test_v) - OMEGA)
-        if err < min_err:
-            min_err, best_v = err, test_v
-    print(f"  V = {best_v:.4f}  (omega err = {min_err:.6f})")
+    print(f"  V = {GY94_V} (frozen, brentq-calibrated in src/constants.py)")
 
     Q, sense_codons, pi, _ = build_gy94_rate_matrix(
-        codon_freqs, kappa=KAPPA, V=best_v)
+        codon_freqs, kappa=KAPPA, V=GY94_V)
     H, _ = symmetrize_to_hamiltonian(Q, pi, n_qubits=N_QUBITS)
     pauli_full, _ = decompose_to_pauli(H, n_qubits=N_QUBITS, threshold=1e-6)
 
@@ -246,7 +255,7 @@ def main():
     print(f"\n[2/4] Loading cached {N_LAYERS}-layer AAE...")
     s1 = build_gapdh_register(n_qubits=N_QUBITS)
     aae_json = os.path.join(
-        _PROJECT_DIR, 'results', 'best_aae_params_gapdh.json')
+        _PROJECT_DIR, 'results', 'best_aae_params_gapdh_probability.json')
     s2 = get_aae_circuit(s1, aae_json, n_layers=N_LAYERS)
     aae_circuit = s2['circuit']
     overlap = float(s2['overlap'])
@@ -255,6 +264,7 @@ def main():
     # ---------- Block-encoding at the target threshold ----------
     print(f"\n[3/4] Block-encoding at threshold {THRESHOLD}...")
     pauli_op, n_kept = filter_pauli_op(pauli_full, THRESHOLD)
+    assert_strictly_negative(pauli_op)
     be_circuit, alpha_be, be_info = build_simple_block_encoding(
         pauli_op, n_data_qubits=N_QUBITS)
     n_be = be_info['n_ancilla']
@@ -286,9 +296,7 @@ def main():
             f_qsp_b, f_qsp_h, qsp_norm2, n_phi_qsp = evaluate_qsp_at_t(
                 be_circuit, aae_circuit, Q, pi, pi_eq, alpha_be, n_be, t)
         except Exception as e:
-            print(f"   QSP @ t={t} failed: {e}")
-            f_qsp_b, f_qsp_h, qsp_norm2, n_phi_qsp = (
-                float('nan'), float('nan'), float('nan'), 0)
+            raise RuntimeError(f"QSP evaluation failed at t={t}") from e
         qsp_time = time.time() - t0
 
         # QSVT
@@ -297,9 +305,7 @@ def main():
             f_qsvt_b, f_qsvt_h, qsvt_norm2, n_phi_qsvt = evaluate_qsvt_at_t(
                 be_circuit, aae_circuit, Q, pi, pi_eq, alpha_be, n_be, t)
         except Exception as e:
-            print(f"   QSVT @ t={t} failed: {e}")
-            f_qsvt_b, f_qsvt_h, qsvt_norm2, n_phi_qsvt = (
-                float('nan'), float('nan'), float('nan'), 0)
+            raise RuntimeError(f"QSVT evaluation failed at t={t}") from e
         qsvt_time = time.time() - t0
 
         print(f"  {t:>5.2f}  {f_cl_eq:>9.4f}  "
@@ -333,7 +339,7 @@ def main():
             'config': {
                 'kappa':         KAPPA,
                 'omega':         OMEGA,
-                'V':             best_v,
+                'V':             GY94_V,
                 'threshold':     THRESHOLD,
                 'epsilon':       EPSILON,
                 'n_qubits':      N_QUBITS,
@@ -343,10 +349,10 @@ def main():
                 'aae_overlap':   overlap,
                 'lambda_bar':    lambda_bar,
                 'lambda_min':    lambda_min,
-                'qsvt_postprocessing': 'sqrt(p/pi_eq) reweight (METHOD B)',
+                'qsvt_postprocessing': 'sqrt(p * pi_eq) inverse-symmetrization reweight',
             },
             'rows': rows,
-        }, f, indent=2, default=str)
+        }, f, indent=2, default=str, allow_nan=False)
     print(f"\n  Results saved -> {out_path}")
     print("\n  Next: run  python scripts/plot_hellinger_and_norm.py")
 

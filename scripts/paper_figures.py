@@ -85,12 +85,13 @@ def fig1_encoding_comparison_grid(results):
     depths = [enc['mottonen']['depth'], enc['angle']['depth'], enc['aae']['depth']]
     two_q = [enc['mottonen']['two_q_gates'], enc['angle']['two_q_gates'], enc['aae']['two_q_gates']]
 
-    # For fidelity panel: 4 bars
+    # For the fidelity panel, use one definition throughout:
+    # F_H = 1-H^2 = sum_i sqrt(p_i q_i).
     fid_labels = ['Amplitude', 'Angle', 'AAE\n(ideal)', 'AAE\n(Quebec)']
     fid_values = [
         enc['mottonen']['fidelity'],
         enc['angle']['fidelity'],
-        results['fidelity'],
+        noisy['hf_target_ideal'],
         enc['aae']['fidelity'],
     ]
     fid_colors = [C_AMP, C_ANG, C_AAE, C_AAE_NOISY]
@@ -101,7 +102,8 @@ def fig1_encoding_comparison_grid(results):
         (axes[0, 0], '(a)  Qubits', labels, qubits, colors, None),
         (axes[0, 1], '(b)  Transpiled depth', labels, depths, colors, None),
         (axes[1, 0], '(c)  2Q gates', labels, two_q, colors, None),
-        (axes[1, 1], '(d)  Fidelity', fid_labels, fid_values, fid_colors, None),
+        (axes[1, 1], r'(d)  Hellinger fidelity $F_H$', fid_labels,
+         fid_values, fid_colors, None),
     ]
 
     for ax, title, xlabels, values, cols, ylim in panels:

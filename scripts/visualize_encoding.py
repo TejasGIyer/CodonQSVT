@@ -165,7 +165,7 @@ def fig3_target_vs_achieved():
     target_probs = target ** 2
 
     # Check if we have saved best params
-    params_path = os.path.join(_SCRIPT_DIR, 'results', 'best_aae_params_gapdh.json')
+    params_path = os.path.join(_PROJECT_DIR, 'results', 'best_aae_params_gapdh_probability.json')
     if os.path.exists(params_path):
         with open(params_path) as f:
             saved = json.load(f)
@@ -240,7 +240,7 @@ def fig4_optimizer_convergence():
     """Plot cost vs evaluations for all 5 optimizers."""
     print("  [4/6] Optimizer convergence curves...")
 
-    bench_path = os.path.join(_SCRIPT_DIR, 'results', 'optimizer_benchmark_gapdh.json')
+    bench_path = os.path.join(_PROJECT_DIR, 'results', 'optimizer_benchmark_gapdh.json')
     if not os.path.exists(bench_path):
         print(f"    Benchmark data not found at {bench_path}")
         print("    Run optimizer_benchmark_gapdh.py first!")
@@ -325,7 +325,7 @@ def fig5_optimizer_comparison():
     """Bar chart comparing final overlap across optimizers."""
     print("  [5/6] Optimizer comparison bar chart...")
 
-    bench_path = os.path.join(_SCRIPT_DIR, 'results', 'optimizer_benchmark_gapdh.json')
+    bench_path = os.path.join(_PROJECT_DIR, 'results', 'optimizer_benchmark_gapdh.json')
     if not os.path.exists(bench_path):
         print(f"    Benchmark data not found. Run optimizer_benchmark_gapdh.py first!")
         return
