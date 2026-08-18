@@ -201,12 +201,14 @@ def build_gapdh_register(n_qubits=6):
     for entry in unique_register:
         weight_vector[entry['unique_index']] = entry['weight']
 
-    # Normalized amplitude vector
-    d = weight_vector.copy()
-    norm = np.linalg.norm(d)
-    if norm > 0:
-        d /= norm
-    p_comp = d ** 2
+    # Encode the empirical codon-frequency distribution as amplitudes.
+    # A probability distribution p must be prepared as sum_i sqrt(p_i)|i>;
+    # directly L2-normalizing counts would instead measure count_i**2.
+    total_weight = float(weight_vector.sum())
+    if total_weight <= 0:
+        raise ValueError("GAPDH register contains no sense-codon observations")
+    p_comp = weight_vector / total_weight
+    d = np.sqrt(p_comp)
 
     return {
         'sequence': combined,
