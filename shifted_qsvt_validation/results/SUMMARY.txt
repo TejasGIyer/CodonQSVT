@@ -1,0 +1,35 @@
+SCALAR-SHIFTED QSVT VALIDATION SUMMARY
+================================================
+Selected coefficient cutoff: 0.075
+Retained Pauli terms: 38
+Scalar shift s: 0.443441048
+lambda_max before shift: +0.443440048
+lambda_max after shift: -9.999999996e-07
+Block-encoding alpha: 6.483170351
+Relative spectral truncation error: 0.327098
+
+Minimum QSVT-vs-CTMC fidelity: 0.945596
+Minimum QSVT-vs-exact-shifted fidelity: 0.999999999965
+Minimum skill over identity (t>0): 0.930715
+Maximum QSVT-vs-CTMC TV distance: 0.129553
+Maximum hidden negative physical mass: 0.000e+00
+
+Acceptance checks:
+  PASS  strictly_negative_shifted_spectrum
+  PASS  full_h_matches_ctmc
+  PASS  scalar_shift_preserves_distribution
+  PASS  ideal_qsvt_matches_exact_shifted_operator
+  PASS  synthesized_phase_response_error_below_1e_4
+  PASS  qsvt_tracks_full_ctmc_above_0_94
+  PASS  qsvt_beats_identity_at_all_nonzero_times
+  PASS  no_hidden_negative_physical_mass
+  PASS  all_passed
+
+Interpretation:
+The scalar shift makes the truncated operator strictly negative while
+leaving every normalized evolved codon distribution unchanged.  The
+synthesized high-precision QSP phase response reproduces the exact shifted
+exponential,
+and the 38-term trajectory tracks the full GY94 CTMC across the tested
+time range.  This is FTQC algorithm proof-of-concept evidence; it is not
+a near-term hardware or quantum-speedup claim.
